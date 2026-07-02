@@ -146,6 +146,9 @@ class Scheduler(ISchedulerService):
             ("tw_intraday", "0 9 * * 1-5", "intraday"),
             ("tw_post_market", "45 13 * * 1-5", "post_market"),
             ("tw_monthly_rebuild", "0 20 * * 0", "monthly_rebuild"),
+            # 維運排程（非交易日亦執行）
+            ("daily_backup", "0 14 * * *", "backup_db"),
+            ("weekly_retrain", "0 21 * * 0", "retrain_model"),
         ]
         for name, cron, workflow in defaults:
             await self.add_schedule(name, cron, workflow)
@@ -161,7 +164,9 @@ class Scheduler(ISchedulerService):
             for entry in self._schedules.values():
                 if not entry.enabled:
                     continue
-                if not is_trade_day and entry.workflow_name != "monthly_rebuild":
+                # monthly_rebuild / backup_db / retrain_model 不受交易日限制
+                _ops_workflows = {"monthly_rebuild", "backup_db", "retrain_model"}
+                if not is_trade_day and entry.workflow_name not in _ops_workflows:
                     continue
                 if self._should_run(entry, now):
                     asyncio.create_task(self._execute_schedule(entry))

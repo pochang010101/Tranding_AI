@@ -1,9 +1,10 @@
-"""導航側邊欄 — 頁面導航 + 市場切換 + 主題切換。"""
+"""導航側邊欄 — 頁面導航 + 市場切換 + 主題切換 + 語言切換。"""
 
 from __future__ import annotations
 
 import streamlit as st
 
+from atlas.i18n import SUPPORTED_LANGS, get_lang, set_lang
 from atlas.presentation.components.theme import toggle_theme
 
 # 頁面定義：(key, icon, label)
@@ -57,6 +58,20 @@ def render_sidebar() -> str:
                 st.rerun()
 
         st.divider()
+
+        # 語言切換
+        _LANG_LABELS = {"zh-TW": "繁中", "en": "English"}
+        current_lang = get_lang()
+        selected_lang = st.selectbox(
+            "Language / 語言",
+            options=SUPPORTED_LANGS,
+            index=SUPPORTED_LANGS.index(current_lang),
+            format_func=lambda x: _LANG_LABELS.get(x, x),
+            key="lang_selectbox",
+        )
+        if selected_lang != current_lang:
+            set_lang(selected_lang)
+            st.rerun()
 
         # 主題切換
         theme_label = "🌙 深色" if st.session_state.get("theme", "dark") == "dark" else "☀️ 亮色"

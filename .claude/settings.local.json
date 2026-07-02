@@ -23,7 +23,8 @@
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_financials.py -x -q --tb=short)",
       "Bash(PYTHONPATH=. python -m pytest tests/ -q --tb=short)",
       "Bash(PYTHONPATH=. python scripts/train_model.py)",
-      "Bash(PYTHONPATH=. python scripts/verify_e2e.py 2>&1)"
+      "Bash(PYTHONPATH=. python scripts/verify_e2e.py 2>&1)",
+      "Bash(PYTHONPATH=. python -m pytest tests/unit/test_i18n.py -x -q --tb=short 2>&1)"
     ]
   }
 }

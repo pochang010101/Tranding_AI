@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -30,13 +31,15 @@ logger = logging.getLogger(__name__)
 class WorkflowEngine(IWorkflowEngine):
     """工作流引擎。
 
-    管理六大工作流：
+    管理八大工作流：
     - pre_market: 盤前 SOP（國際行情→缺口預測→環境感知→情緒→推播）
     - intraday: 盤中監控（啟動雷達→定期掃描→推播告警）
     - post_market: 盤後 SOP（選股掃描→結論→回測更新→推播報告）
     - ipo_scan: IPO 掃描
     - weekly_report: 週報產出
     - monthly_rebuild: 月度重建股票池
+    - backup_db: 資料庫備份（每日 14:00）
+    - retrain_model: ML 模型重訓（每週日 21:00）
     """
 
     def __init__(
@@ -84,6 +87,8 @@ class WorkflowEngine(IWorkflowEngine):
                 "ipo_scan": self._run_ipo_scan,
                 "weekly_report": self._run_weekly_report,
                 "monthly_rebuild": self._run_monthly_rebuild,
+                "backup_db": self._run_backup_db,
+                "retrain_model": self._run_retrain_model,
             }.get(workflow_name)
 
             if not handler:
@@ -303,6 +308,63 @@ class WorkflowEngine(IWorkflowEngine):
             return {"status": "rebuilt", "universe_size": len(codes)}
         return {"status": "no_universe_manager"}
 
+    async def _run_backup_db(self) -> dict[str, Any]:
+        """資料庫備份：呼叫 scripts/backup_db.sh。"""
+        import shutil
+
+        script = shutil.which("bash")
+        cmd = [script or "bash", "scripts/backup_db.sh"] if script else ["scripts/backup_db.sh"]
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
+            output = stdout.decode(errors="replace") if stdout else ""
+            if proc.returncode == 0:
+                logger.info("backup_db completed:\n%s", output)
+                return {"status": "success", "output": output[-500:]}  # 截取最後 500 字元
+            else:
+                logger.error("backup_db failed (rc=%d):\n%s", proc.returncode, output)
+                return {"status": "failed", "returncode": proc.returncode, "output": output[-500:]}
+        except asyncio.TimeoutError:
+            logger.error("backup_db timed out after 300s")
+            return {"status": "timeout"}
+        except Exception as exc:
+            logger.error("backup_db error: %s", exc)
+            return {"status": "error", "error": str(exc)}
+
+    async def _run_retrain_model(self) -> dict[str, Any]:
+        """ML 模型重訓：呼叫 scripts/retrain_model.sh。"""
+        import shutil
+
+        script = shutil.which("bash")
+        cmd = [script or "bash", "scripts/retrain_model.sh"] if script else ["scripts/retrain_model.sh"]
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            # 訓練可能耗時較長，給 30 分鐘
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=1800)
+            output = stdout.decode(errors="replace") if stdout else ""
+            if proc.returncode == 0:
+                logger.info("retrain_model completed:\n%s", output)
+                return {"status": "success", "output": output[-500:]}
+            else:
+                logger.error("retrain_model failed (rc=%d):\n%s", proc.returncode, output)
+                return {"status": "failed", "returncode": proc.returncode, "output": output[-500:]}
+        except asyncio.TimeoutError:
+            logger.error("retrain_model timed out after 1800s")
+            return {"status": "timeout"}
+        except Exception as exc:
+            logger.error("retrain_model error: %s", exc)
+            return {"status": "error", "error": str(exc)}
+
     # ── 通知推播 ────────────────────────────────
 
     async def _notify_workflow_done(
@@ -324,6 +386,8 @@ class WorkflowEngine(IWorkflowEngine):
             "ipo_scan": "IPO 掃描完成",
             "weekly_report": "週報已產出",
             "monthly_rebuild": "月度重建完成",
+            "backup_db": "資料庫備份完成",
+            "retrain_model": "ML 模型重訓完成",
         }
         title = f"📊 {title_map.get(workflow_name, workflow_name)}"
         body = self._format_workflow_body(workflow_name, result, elapsed)
@@ -381,5 +445,11 @@ class WorkflowEngine(IWorkflowEngine):
 
         elif workflow_name == "monthly_rebuild":
             lines.append(f"股票池: {result.get('universe_size', 0)} 檔")
+
+        elif workflow_name == "backup_db":
+            lines.append(f"狀態: {result.get('status', '?')}")
+
+        elif workflow_name == "retrain_model":
+            lines.append(f"狀態: {result.get('status', '?')}")
 
         return "\n".join(lines)

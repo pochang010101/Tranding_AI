@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 import statistics
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
@@ -131,14 +132,101 @@ def main() -> None:
     print(f"{scan_time:.0f} ms")
     results.append(("30-stock scan (250 bars each)", scan_time))
 
+    # ------------------------------------------------------------------
+    # Concurrent scan benchmark — 10 workers each scanning 10 stocks
+    # Measures ThreadPoolExecutor throughput and p95 worker latency
+    # ------------------------------------------------------------------
+    print(f"\n  Running: concurrent scan (10 workers × 10 stocks)...", end=" ", flush=True)
+    _concurrent_result = bench_concurrent_scan(num_workers=10, stocks_per_worker=10)
+    print(
+        f"total={_concurrent_result['total_ms']:.0f} ms  "
+        f"p95={_concurrent_result['p95_ms']:.0f} ms  "
+        f"throughput={_concurrent_result['throughput_stocks_per_sec']:.1f} stocks/s"
+    )
+    results.append(("Concurrent scan (10w×10s) total", _concurrent_result["total_ms"]))
+    results.append(("Concurrent scan p95 worker latency", _concurrent_result["p95_ms"]))
+
     print("\n" + "=" * 60)
     print("Summary:")
     print("-" * 60)
     for name, ms in results:
         status = f"{ms:.2f} ms" if ms >= 0 else "FAILED"
-        target = "< 50ms" if "score" in name.lower() else "< 500ms"
+        if "score" in name.lower():
+            target = "< 50ms"
+        elif "concurrent" in name.lower() and "p95" in name.lower():
+            target = "< 2000ms"
+        elif "concurrent" in name.lower():
+            target = "< 5000ms"
+        else:
+            target = "< 500ms"
         print(f"  {name:45s} {status:>12s}  (target {target})")
     print("=" * 60)
+
+
+def bench_concurrent_scan(
+    num_workers: int = 10,
+    stocks_per_worker: int = 10,
+    bars: int = 250,
+) -> dict:
+    """
+    Simulate num_workers concurrent stock scans using ThreadPoolExecutor.
+
+    Each worker independently:
+      1. Generates synthetic OHLCV data
+      2. Runs IndicatorLibrary.calculate_all()
+      3. Applies scoring logic
+
+    Returns total elapsed time, per-worker latencies, and throughput.
+    """
+    from atlas.strategy.indicator_lib import IndicatorLibrary
+
+    def _worker_task(worker_id: int) -> float:
+        """Scan stocks_per_worker stocks; return elapsed seconds."""
+        lib = IndicatorLibrary()  # each thread gets its own instance (thread-safe)
+        t0 = time.perf_counter()
+        for _ in range(stocks_per_worker):
+            df = generate_ohlcv(bars)
+            ind = lib.calculate_all(df)
+            last = ind.iloc[-1]
+            # Replicate scoring logic (read-only, no DB I/O)
+            rsi = last.get("RSI14", 50)
+            close = last.get("close", 0)
+            ma21 = last.get("MA21", close)
+            macd_hist = last.get("MACD_hist", 0)
+            _score = (
+                35 * (40 <= rsi <= 75)
+                + 35 * (close > ma21)
+                + 30 * (macd_hist > 0)
+            )
+        return time.perf_counter() - t0
+
+    worker_times: list[float] = []
+    wall_start = time.perf_counter()
+
+    with ThreadPoolExecutor(max_workers=num_workers) as pool:
+        futures = {pool.submit(_worker_task, i): i for i in range(num_workers)}
+        for fut in as_completed(futures):
+            try:
+                worker_times.append(fut.result())
+            except Exception as exc:
+                print(f"\n    [worker error] {exc}")
+
+    wall_elapsed_ms = (time.perf_counter() - wall_start) * 1000
+    worker_times_ms = [t * 1000 for t in worker_times]
+    total_stocks = num_workers * stocks_per_worker
+
+    return {
+        "total_ms": wall_elapsed_ms,
+        "median_ms": statistics.median(worker_times_ms) if worker_times_ms else -1,
+        "p95_ms": (
+            sorted(worker_times_ms)[int(len(worker_times_ms) * 0.95) - 1]
+            if len(worker_times_ms) >= 2
+            else worker_times_ms[0] if worker_times_ms else -1
+        ),
+        "throughput_stocks_per_sec": total_stocks / (wall_elapsed_ms / 1000)
+        if wall_elapsed_ms > 0
+        else 0,
+    }
 
 
 if __name__ == "__main__":

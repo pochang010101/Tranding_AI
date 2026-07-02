@@ -168,3 +168,5 @@ volumes:
     driver: local
   redisdata_prod:
     driver: local
+  backups:
+    driver: local
