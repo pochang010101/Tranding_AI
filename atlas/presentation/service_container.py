@@ -13,6 +13,16 @@ import streamlit as st
 
 logger = logging.getLogger(__name__)
 
+# 已知上櫃(OTC)股票代碼集合
+_OTC_PREFIXES: frozenset[str] = frozenset({
+    "5269", "6488", "6669", "3293", "8069", "6147", "3529", "6770", "8454", "5871",
+})
+
+
+def _is_otc(code: str) -> bool:
+    """判斷是否為上櫃股票（OTC）。"""
+    return code in _OTC_PREFIXES
+
 
 @st.cache_resource
 def get_indicator_lib():
@@ -107,6 +117,32 @@ def get_scheduler():
     return Scheduler(workflow_engine=wf)
 
 
+@st.cache_resource
+def get_ml_engine():
+    from atlas.strategy.ml_engine import MLEngine
+    engine = MLEngine()
+    # Try to load pre-trained model if available
+    try:
+        engine.load_model("models/atlas_rf.joblib")
+    except Exception:
+        pass  # No pre-trained model available yet
+    return engine
+
+
+@st.cache_resource
+def get_realtime_service():
+    """取得全域 RealtimePushService 單例（背景執行緒已啟動）。
+
+    使用 st.cache_resource 確保整個 Streamlit 應用程式只建立一個實例。
+    Streamlit 重新載入頁面時不會重複 start()，因為 cache_resource 跨 session 共用。
+    """
+    from atlas.infrastructure.ws_server import RealtimePushService
+
+    svc = RealtimePushService(interval=30)
+    svc.start()
+    return svc
+
+
 def fetch_stock_data(code: str, period: str = "6mo") -> Any:
     """用 yfinance 取得股票歷史資料（快取 10 分鐘）。"""
     import yfinance as yf
@@ -114,7 +150,10 @@ def fetch_stock_data(code: str, period: str = "6mo") -> Any:
 
     @st.cache_data(ttl=600)
     def _fetch(code: str, period: str) -> pd.DataFrame:
-        suffix = ".TW" if code.isdigit() else ""
+        if code.isdigit():
+            suffix = ".TWO" if _is_otc(code) else ".TW"
+        else:
+            suffix = ""
         ticker = yf.Ticker(f"{code}{suffix}")
         df = ticker.history(period=period)
         if df is None or df.empty:
@@ -142,7 +181,10 @@ def fetch_stock_quote(code: str) -> dict[str, Any]:
 
         # yfinance fallback
         import yfinance as yf
-        suffix = ".TW" if code.isdigit() else ""
+        if code.isdigit():
+            suffix = ".TWO" if _is_otc(code) else ".TW"
+        else:
+            suffix = ""
         ticker = yf.Ticker(f"{code}{suffix}")
         info = ticker.fast_info
         try:
@@ -163,23 +205,35 @@ def fetch_stock_quote(code: str) -> dict[str, Any]:
 
 
 def _fetch_twse_quote(code: str) -> dict[str, Any]:
-    """直接呼叫 TWSE MIS API 取得台股即時報價。"""
+    """直接呼叫 TWSE MIS API 取得台股即時報價。
+
+    上市股用 tse_{code}.tw，上櫃股用 otc_{code}.tw。
+    若 tse 回傳空 msgArray，自動以 otc 前綴重試一次。
+    """
     import httpx
     import time as _time
 
     url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
-    params = {
-        "ex_ch": f"tse_{code}.tw",
-        "json": "1",
-        "_": str(int(_time.time() * 1000)),
-    }
-    resp = httpx.get(url, params=params, timeout=8, headers={
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
-    }, follow_redirects=True)
-    resp.raise_for_status()
-    data = resp.json()
-    items = data.get("msgArray", [])
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+
+    # 已知 OTC 直接用 otc，否則先試 tse 再 fallback otc
+    prefixes = ["otc"] if _is_otc(code) else ["tse", "otc"]
+
+    items: list = []
+    for prefix in prefixes:
+        params = {
+            "ex_ch": f"{prefix}_{code}.tw",
+            "json": "1",
+            "_": str(int(_time.time() * 1000)),
+        }
+        resp = httpx.get(url, params=params, timeout=8, headers=headers,
+                         follow_redirects=True)
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("msgArray", [])
+        if items:
+            break  # 有資料就停止重試
+
     if not items:
         raise ValueError("TWSE MIS returned empty msgArray")
 
@@ -289,6 +343,77 @@ def fetch_margin_data(code: str) -> dict[str, Any]:
     return _fetch(code)
 
 
+def fetch_financials(code: str) -> dict[str, Any]:
+    """取得個股基本面資料（快取 1 小時）。
+
+    Returns dict with keys:
+      eps, gross_margin, operating_margin, revenue, pe_ratio, pb_ratio
+    """
+    @st.cache_data(ttl=3600)
+    def _fetch(code: str) -> dict[str, Any]:
+        import yfinance as yf
+
+        if code.isdigit():
+            suffix = ".TWO" if _is_otc(code) else ".TW"
+        else:
+            suffix = ""
+        ticker = yf.Ticker(f"{code}{suffix}")
+
+        info: dict[str, Any] = {}
+        try:
+            info = ticker.info or {}
+        except Exception:
+            pass
+
+        eps: float | None = info.get("trailingEps") or info.get("forwardEps")
+        pe_ratio: float | None = info.get("trailingPE") or info.get("forwardPE")
+        pb_ratio: float | None = info.get("priceToBook")
+
+        gross_margin: float | None = None
+        operating_margin: float | None = None
+        revenue: int | None = None
+
+        try:
+            qf = ticker.quarterly_financials
+            if qf is not None and not qf.empty:
+                col = qf.columns[0]
+                idx_lower = [str(i).lower() for i in qf.index]
+
+                def _get(keywords: list[str]) -> float | None:
+                    for kw in keywords:
+                        matches = [i for i, n in enumerate(idx_lower) if kw in n]
+                        if matches:
+                            try:
+                                return float(qf.iloc[matches[0]][col])
+                            except (TypeError, ValueError):
+                                pass
+                    return None
+
+                total_rev = _get(["total revenue", "operating revenue"])
+                gross = _get(["gross profit"])
+                op_income = _get(["operating income", "ebit"])
+
+                revenue = int(total_rev) if total_rev else None
+                if total_rev:
+                    if gross is not None:
+                        gross_margin = round(gross / total_rev * 100, 2)
+                    if op_income is not None:
+                        operating_margin = round(op_income / total_rev * 100, 2)
+        except Exception:
+            pass
+
+        return {
+            "eps": eps,
+            "gross_margin": gross_margin,
+            "operating_margin": operating_margin,
+            "revenue": revenue,
+            "pe_ratio": pe_ratio,
+            "pb_ratio": pb_ratio,
+        }
+
+    return _fetch(code)
+
+
 # Top 30 TW stocks for quick reference
 TW_TOP_STOCKS = [
     ("2330", "台積電"), ("2454", "聯發科"), ("2317", "鴻海"), ("2308", "台達電"),
@@ -299,4 +424,6 @@ TW_TOP_STOCKS = [
     ("1216", "統一"), ("2207", "和泰車"), ("5880", "合庫金"), ("2603", "長榮"),
     ("2880", "華南金"), ("2885", "元大金"), ("3045", "台灣大"), ("2912", "統一超"),
     ("2395", "研華"), ("4904", "遠傳"),
+    # OTC (上櫃) stocks
+    ("6669", "緯穎"), ("5269", "祥碩"), ("6488", "環球晶"),
 ]

@@ -42,9 +42,21 @@ _CACHE_TTL_ALL = 1800  # 30 分鐘
 _HTTP_TIMEOUT = 30.0
 
 
+# 已知上櫃(OTC)股票代碼集合；TSE 查無資料時也可動態發現
+_KNOWN_OTC_CODES: frozenset[str] = frozenset({
+    "5269", "6488", "6669", "3293", "8069", "6147", "3529", "6770", "8454", "5871",
+})
+
+
+def _is_otc(code: str) -> bool:
+    """判斷是否為上櫃股票（OTC）。"""
+    return code in _KNOWN_OTC_CODES
+
+
 def _tw_code_to_yf(code: str) -> str:
-    """台股代碼轉 yfinance ticker（加 .TW 或 .TWO）。"""
-    return f"{code}.TW"
+    """台股代碼轉 yfinance ticker（上市加 .TW，上櫃加 .TWO）。"""
+    suffix = ".TWO" if _is_otc(code) else ".TW"
+    return f"{code}{suffix}"
 
 
 def _safe_decimal(value: Any) -> Decimal:
@@ -362,6 +374,171 @@ class DataManager(IDataManager):
             self._logger.error("Revenue fetch failed for %s: %s", code, exc)
             raise DataSourceError(
                 f"Revenue fetch failed: {exc}", source="mops"
+            ) from exc
+
+    async def fetch_quarterly_financials(
+        self,
+        code: str,
+        market: MarketType,
+        year: int,
+        quarter: int,
+    ) -> dict[str, Any]:
+        """取得季財報資料（EPS、毛利率、營益率、稅後淨利、營業收入）。
+
+        主要來源：公開資訊觀測站 (MOPS) ajax_t163sb04。
+        Fallback：yfinance quarterly_financials。
+        """
+        self._validate_code(code, market)
+
+        if market != MarketType.TW:
+            self._logger.warning("Quarterly financials not yet supported for %s", market)
+            return {}
+
+        if not (1 <= quarter <= 4):
+            raise ValidationError(
+                f"quarter must be 1-4, got {quarter}", field="quarter"
+            )
+
+        tw_year = year - 1911  # 轉民國年
+        empty: dict[str, Any] = {
+            "code": code,
+            "year": year,
+            "quarter": quarter,
+            "eps": None,
+            "gross_margin": None,
+            "operating_margin": None,
+            "net_income": None,
+            "revenue": None,
+        }
+
+        # ── 主要來源：MOPS HTML ──────────────────────────────────────────
+        try:
+            url = "https://mops.twse.com.tw/mops/web/ajax_t163sb04"
+            post_data = (
+                f"encodeURIComponent=1&step=1&firstin=1&off=1"
+                f"&co_id={code}&year={tw_year}&season={quarter}"
+            )
+            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+                resp = await client.post(
+                    url,
+                    content=post_data.encode(),
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+                resp.raise_for_status()
+
+            from io import StringIO
+            tables = pd.read_html(StringIO(resp.text))
+            result = dict(empty)
+
+            for table in tables:
+                str_table = table.astype(str)
+                for _, row in str_table.iterrows():
+                    row_vals = list(row.values)
+                    label = row_vals[0] if row_vals else ""
+
+                    # 每股盈餘
+                    if "每股盈餘" in label and result["eps"] is None:
+                        for v in row_vals[1:]:
+                            try:
+                                result["eps"] = float(v.replace(",", ""))
+                                break
+                            except (ValueError, AttributeError):
+                                continue
+
+                    # 營業收入
+                    elif "營業收入" in label and result["revenue"] is None:
+                        for v in row_vals[1:]:
+                            try:
+                                result["revenue"] = int(v.replace(",", ""))
+                                break
+                            except (ValueError, AttributeError):
+                                continue
+
+                    # 毛利率
+                    elif "毛利率" in label and result["gross_margin"] is None:
+                        for v in row_vals[1:]:
+                            try:
+                                result["gross_margin"] = float(v.replace(",", "").rstrip("%"))
+                                break
+                            except (ValueError, AttributeError):
+                                continue
+
+                    # 營益率 / 營業利益率
+                    elif any(k in label for k in ("營益率", "營業利益率")) and result["operating_margin"] is None:
+                        for v in row_vals[1:]:
+                            try:
+                                result["operating_margin"] = float(v.replace(",", "").rstrip("%"))
+                                break
+                            except (ValueError, AttributeError):
+                                continue
+
+                    # 稅後淨利 / 本期淨利
+                    elif any(k in label for k in ("稅後淨利", "本期淨利", "本期稅後淨利")) and result["net_income"] is None:
+                        for v in row_vals[1:]:
+                            try:
+                                result["net_income"] = int(v.replace(",", ""))
+                                break
+                            except (ValueError, AttributeError):
+                                continue
+
+            # 至少解析到一個欄位視為成功
+            if any(result[k] is not None for k in ("eps", "revenue", "gross_margin", "operating_margin", "net_income")):
+                self._logger.info("MOPS quarterly financials fetched for %s %dQ%d", code, year, quarter)
+                return result
+
+        except Exception as exc:
+            self._logger.warning(
+                "MOPS quarterly fetch failed for %s: %s — trying yfinance", code, exc
+            )
+
+        # ── Fallback：yfinance ────────────────────────────────────────────
+        try:
+            def _yf_fetch() -> dict[str, Any]:
+                ticker = yf.Ticker(f"{code}.TW")
+                info = ticker.info or {}
+                qf = ticker.quarterly_financials  # columns=periods, index=line items
+
+                res = dict(empty)
+                res["eps"] = info.get("trailingEps") or info.get("forwardEps")
+
+                if qf is not None and not qf.empty:
+                    col = qf.columns[0]
+                    idx_lower = [str(i).lower() for i in qf.index]
+
+                    def _get(keywords: list[str]) -> float | None:
+                        for kw in keywords:
+                            matches = [i for i, n in enumerate(idx_lower) if kw in n]
+                            if matches:
+                                val = qf.iloc[matches[0]][col]
+                                try:
+                                    return float(val)
+                                except (TypeError, ValueError):
+                                    pass
+                        return None
+
+                    total_rev = _get(["total revenue", "operating revenue"])
+                    gross = _get(["gross profit"])
+                    op_income = _get(["operating income", "ebit"])
+                    net = _get(["net income"])
+
+                    res["revenue"] = int(total_rev) if total_rev else None
+                    res["net_income"] = int(net) if net else None
+                    if total_rev:
+                        if gross is not None:
+                            res["gross_margin"] = round(gross / total_rev * 100, 2)
+                        if op_income is not None:
+                            res["operating_margin"] = round(op_income / total_rev * 100, 2)
+
+                return res
+
+            yf_result = await asyncio.to_thread(_yf_fetch)
+            self._logger.info("yfinance quarterly financials fetched for %s", code)
+            return yf_result
+
+        except Exception as exc:
+            self._logger.error("yfinance quarterly fetch failed for %s: %s", code, exc)
+            raise DataSourceError(
+                f"Quarterly financials fetch failed for {code}: {exc}", source="yfinance"
             ) from exc
 
     async def save_daily_bars(self, bars: list[DailyBar]) -> int:

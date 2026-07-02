@@ -28,10 +28,17 @@ def main() -> None:
 
     _init_session()
 
-    from atlas.presentation.components.theme import inject_css
+    from atlas.presentation.auth import check_password
+    if not check_password():
+        st.stop()
+
+    from atlas.presentation.components.pwa import inject_pwa
+    from atlas.presentation.components.theme import inject_css, inject_mobile_css
     from atlas.presentation.components.sidebar import render_sidebar
 
+    inject_pwa()
     inject_css()
+    inject_mobile_css()
     page = render_sidebar()
 
     # 動態載入頁面

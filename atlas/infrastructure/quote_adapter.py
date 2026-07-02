@@ -28,6 +28,17 @@ from atlas.models.market_data import StockQuote
 
 logger = logging.getLogger(__name__)
 
+# 已知上櫃(OTC)股票代碼集合；TSE 查無資料時也可動態發現
+_KNOWN_OTC_CODES: frozenset[str] = frozenset({
+    "5269", "6488", "6669", "3293", "8069", "6147", "3529", "6770", "8454", "5871",
+})
+
+
+def _is_otc(code: str) -> bool:
+    """判斷是否為上櫃股票（OTC）。"""
+    return code in _KNOWN_OTC_CODES
+
+
 # TWSE MIS API 單次批次上限
 _TWSE_BATCH_LIMIT = 50
 # httpx 預設逾時秒數
@@ -165,10 +176,10 @@ class TWSEQuoteSource(QuoteSource):
     def _to_ex_ch(code: str) -> str:
         """將股票代碼轉換為 TWSE MIS ex_ch 格式。
 
-        上櫃股以 6 開頭的 4 碼代碼為主，但此處簡化處理：
-        先嘗試 tse（上市），若失敗可在上層用 otc 重試。
+        上櫃股使用 otc_{code}.tw，上市股使用 tse_{code}.tw。
         """
-        return f"tse_{code}.tw"
+        prefix = "otc" if _is_otc(code) else "tse"
+        return f"{prefix}_{code}.tw"
 
     @staticmethod
     def _parse_item(item: dict[str, Any]) -> StockQuote:
@@ -270,8 +281,9 @@ class YFinanceQuoteSource(QuoteSource):
     def _to_yf_ticker(self, code: str) -> str:
         """將股票代碼轉為 yfinance ticker 格式。"""
         if self._market == MarketType.TW:
-            # 台股上市加 .TW，上櫃加 .TWO；簡化：4 碼預設 .TW
-            return f"{code}.TW"
+            # 上櫃股加 .TWO，上市股加 .TW
+            suffix = ".TWO" if _is_otc(code) else ".TW"
+            return f"{code}{suffix}"
         return code  # 美股直接用 ticker
 
     async def get_quote(self, code: str) -> StockQuote:
@@ -615,7 +627,10 @@ class QuoteAdapter(IQuoteAdapter):
         """用 yfinance 取最近一筆收盤價作為非交易時段報價。"""
         import yfinance as yf
 
-        suffix = ".TW" if market == MarketType.TW else ""
+        if market == MarketType.TW:
+            suffix = ".TWO" if _is_otc(code) else ".TW"
+        else:
+            suffix = ""
         ticker_code = f"{code}{suffix}"
         ticker = yf.Ticker(ticker_code)
         df = await asyncio.to_thread(ticker.history, period="5d")

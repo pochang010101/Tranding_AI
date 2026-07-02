@@ -22,6 +22,13 @@ logger = logging.getLogger(__name__)
 
 _MODEL_DIR = Path("models")
 
+# Features produced by _prepare_features
+_ENGINEERED_FEATURES = [
+    "RSI14", "MACD_hist", "K9", "D9", "BB_pct", "ATR14_pct",
+    "close_ma8", "close_ma21", "close_ma55", "vol_ratio",
+    "candle_body_pct", "upper_shadow", "lower_shadow",
+]
+
 
 class MLEngine(IMLEngine):
     """RandomForest ML 預測引擎。
@@ -29,23 +36,214 @@ class MLEngine(IMLEngine):
     - 僅使用 T-1 資料預測 T 日方向（防未來函數）
     - 特徵：技術指標 + 籌碼面 + 基本面衍生
     - 模型持久化至 models/ 目錄
+    - 支援 standalone 同步訓練（data_manager/indicator_lib 可為 None）
     """
 
     def __init__(
         self,
-        data_manager: DataManager,
-        indicator_lib: IndicatorLibrary,
+        data_manager: DataManager | None = None,
+        indicator_lib: IndicatorLibrary | None = None,
         model_dir: Path | None = None,
     ) -> None:
         self._dm = data_manager
         self._ind = indicator_lib
         self._model_dir = model_dir or _MODEL_DIR
         self._models: dict[str, Any] = {}  # market -> trained model
+        self._standalone_model: Any = None  # model trained via sync train()
 
-    async def predict(
+    # ── Standalone synchronous training pipeline ─────────────────────────
+
+    def _prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Feature engineering on a OHLCV DataFrame.
+
+        Returns a new DataFrame with engineered columns + 'target'.
+        All look-ahead is avoided: shift(-5) is only used for the target label.
+        """
+        from atlas.strategy.indicator_lib import IndicatorLibrary
+
+        lib = self._ind if self._ind is not None else IndicatorLibrary()
+        result = lib.calculate_all(df.copy())
+
+        close = result["close"]
+        open_ = result.get("open", close)  # graceful fallback if open missing
+        high = result.get("high", close)
+        low = result.get("low", close)
+        volume = result.get("volume", pd.Series(1, index=result.index))
+
+        # ── Bollinger %B ────────────────────────────────────────────────
+        if all(c in result.columns for c in ("BB_upper", "BB_lower")):
+            bb_range = (result["BB_upper"] - result["BB_lower"]).replace(0, np.nan)
+            result["BB_pct"] = (close - result["BB_lower"]) / bb_range
+        else:
+            result["BB_pct"] = np.nan
+
+        # ── ATR % of close ──────────────────────────────────────────────
+        if "ATR14" in result.columns:
+            result["ATR14_pct"] = result["ATR14"] / close.replace(0, np.nan)
+        else:
+            result["ATR14_pct"] = np.nan
+
+        # ── D9 alias (indicator_lib uses D3) ────────────────────────────
+        if "D3" in result.columns and "D9" not in result.columns:
+            result["D9"] = result["D3"]
+
+        # ── Momentum: close / MA ratios ─────────────────────────────────
+        for ma in (8, 21, 55):
+            col = f"MA{ma}"
+            if col in result.columns:
+                result[f"close_ma{ma}"] = close / result[col].replace(0, np.nan)
+            else:
+                result[f"close_ma{ma}"] = np.nan
+
+        # ── Volume ratio ────────────────────────────────────────────────
+        vol_ma20 = volume.rolling(20).mean().replace(0, np.nan)
+        result["vol_ratio"] = volume / vol_ma20
+
+        # ── Candle pattern features ──────────────────────────────────────
+        body = (close - open_) / open_.replace(0, np.nan)
+        result["candle_body_pct"] = body
+        candle_range = (high - low).replace(0, np.nan)
+        upper_wick = high - close.clip(lower=open_)
+        lower_wick = open_.clip(upper=close) - low
+        result["upper_shadow"] = upper_wick / candle_range
+        result["lower_shadow"] = lower_wick / candle_range
+
+        # ── Binary target: 5-day forward return > 0 ─────────────────────
+        future_ret = close.shift(-5) / close.replace(0, np.nan) - 1
+        result["target"] = (future_ret > 0).astype(int)
+
+        return result
+
+    def train(self, df: pd.DataFrame, target_col: str = "future_return") -> dict[str, Any]:  # type: ignore[override]
+        """Train a RandomForest on the provided OHLCV DataFrame.
+
+        Args:
+            df: Raw OHLCV data. Must have at least 60 rows.
+            target_col: Ignored — target is always the 5-day forward return binary
+                        label computed internally to prevent future leakage.
+
+        Returns:
+            dict with accuracy, precision, recall, f1, n_samples, feature_importance.
+        """
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+        from sklearn.model_selection import train_test_split
+
+        prepared = self._prepare_features(df)
+        prepared = prepared.dropna(subset=_ENGINEERED_FEATURES + ["target"])
+
+        if len(prepared) < 60:
+            logger.warning("Insufficient data for training: %d rows", len(prepared))
+            return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0,
+                    "f1": 0.0, "n_samples": len(prepared), "feature_importance": {}}
+
+        feature_cols = [c for c in _ENGINEERED_FEATURES if c in prepared.columns]
+        X = prepared[feature_cols].fillna(0)
+        y = prepared["target"]
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, shuffle=False  # time-series safe
+        )
+
+        model = RandomForestClassifier(
+            n_estimators=200,
+            max_depth=8,
+            min_samples_leaf=10,
+            random_state=42,
+            n_jobs=-1,
+        )
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        importance = dict(zip(feature_cols, model.feature_importances_))
+        top_10 = dict(sorted(importance.items(), key=lambda x: x[1], reverse=True)[:10])
+
+        self._standalone_model = model
+        self._feature_cols: list[str] = feature_cols
+
+        result = {
+            "accuracy": round(float(accuracy_score(y_test, y_pred)), 4),
+            "precision": round(float(precision_score(y_test, y_pred, zero_division=0)), 4),
+            "recall": round(float(recall_score(y_test, y_pred, zero_division=0)), 4),
+            "f1": round(float(f1_score(y_test, y_pred, zero_division=0)), 4),
+            "n_samples": int(len(prepared)),
+            "feature_importance": {k: round(v, 4) for k, v in top_10.items()},
+        }
+        logger.info("Standalone model trained: accuracy=%.2f%%, f1=%.2f%%",
+                    result["accuracy"] * 100, result["f1"] * 100)
+        return result
+
+    def predict(self, df: pd.DataFrame) -> pd.Series:  # type: ignore[override]
+        """Predict direction using the standalone trained model.
+
+        Args:
+            df: Raw OHLCV data.
+
+        Returns:
+            pd.Series of int (0/1) predictions aligned to df's index.
+        """
+        if self._standalone_model is None:
+            raise RuntimeError("No standalone model trained. Call train() or load_model() first.")
+
+        prepared = self._prepare_features(df)
+        feature_cols = getattr(self, "_feature_cols", _ENGINEERED_FEATURES)
+        available = [c for c in feature_cols if c in prepared.columns]
+        X = prepared[available].fillna(0)
+        preds = self._standalone_model.predict(X)
+        return pd.Series(preds, index=prepared.index, name="prediction")
+
+    def evaluate(self, y_true: Any, y_pred: Any) -> dict[str, float]:
+        """Calculate classification metrics.
+
+        Args:
+            y_true: Ground-truth labels (array-like of 0/1).
+            y_pred: Predicted labels (array-like of 0/1).
+
+        Returns:
+            dict with accuracy, precision, recall, f1.
+        """
+        from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+
+        return {
+            "accuracy": round(float(accuracy_score(y_true, y_pred)), 4),
+            "precision": round(float(precision_score(y_true, y_pred, zero_division=0)), 4),
+            "recall": round(float(recall_score(y_true, y_pred, zero_division=0)), 4),
+            "f1": round(float(f1_score(y_true, y_pred, zero_division=0)), 4),
+        }
+
+    def save_model(self, path: str) -> None:
+        """Persist standalone model to disk using joblib."""
+        import joblib
+
+        if self._standalone_model is None:
+            raise RuntimeError("No standalone model to save.")
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump({"model": self._standalone_model,
+                     "feature_cols": getattr(self, "_feature_cols", _ENGINEERED_FEATURES)}, out)
+        logger.info("Standalone model saved: %s", out)
+
+    def load_model(self, path: str) -> None:
+        """Load standalone model from disk."""
+        import joblib
+
+        data = joblib.load(path)
+        self._standalone_model = data["model"]
+        self._feature_cols = data["feature_cols"]
+        logger.info("Standalone model loaded: %s", path)
+
+    def feature_importance(self) -> dict[str, float]:
+        """Return feature importance ranking from the standalone model."""
+        if self._standalone_model is None:
+            raise RuntimeError("No standalone model available.")
+        feature_cols = getattr(self, "_feature_cols", _ENGINEERED_FEATURES)
+        importance = dict(zip(feature_cols, self._standalone_model.feature_importances_))
+        return dict(sorted(importance.items(), key=lambda x: x[1], reverse=True))
+
+    async def predict_async(
         self, code: str, market: MarketType, features_df: pd.DataFrame
     ) -> dict[str, Any]:
-        """預測單檔 T+1 方向。"""
+        """預測單檔 T+1 方向（async，使用 market-level model）。"""
         model = self._get_model(market)
         if model is None:
             return {"prediction": False, "probability": 0.5, "feature_importance": {}}
@@ -92,13 +290,13 @@ class MLEngine(IMLEngine):
                     for b in bars
                 ])
                 df = self._ind.calculate_all(df)
-                results[code] = await self.predict(code, market, df)
+                results[code] = await self.predict_async(code, market, df)
             except Exception as exc:
                 logger.debug("ML batch predict skip %s: %s", code, exc)
 
         return results
 
-    async def train(
+    async def train_async(
         self,
         market: MarketType,
         train_end_date: date,

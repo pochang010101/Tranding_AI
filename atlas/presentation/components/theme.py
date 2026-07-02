@@ -111,6 +111,20 @@ def inject_css() -> None:
     """, unsafe_allow_html=True)
 
 
+def inject_mobile_css() -> None:
+    """注入行動裝置響應式 CSS。"""
+    st.markdown("""
+    <style>
+    @media (max-width: 768px) {
+        .stMetric { font-size: 0.8rem; }
+        .stDataFrame { font-size: 0.75rem; }
+        .block-container { padding: 1rem 0.5rem; }
+        [data-testid="stSidebar"] { min-width: 200px; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
 def metric_card(title: str, value: str, delta: str = "", status: str = "neutral") -> str:
     """產生指標卡片 HTML。"""
     c = get_colors()

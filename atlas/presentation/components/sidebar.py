@@ -69,4 +69,14 @@ def render_sidebar() -> str:
         st.divider()
         st.caption(f"市場：{st.session_state.get('market', 'TW')}")
 
+        # 登入使用者 + 登出
+        st.divider()
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.caption(f"👤 {st.session_state.get('username', 'guest')}")
+        with col2:
+            if st.button("登出", key="logout_btn"):
+                from atlas.presentation.auth import logout
+                logout()
+
     return st.session_state.get("page", "dashboard")

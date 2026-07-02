@@ -7,8 +7,42 @@ import streamlit as st
 from atlas.presentation.components.theme import get_colors, metric_card, regime_badge
 from atlas.presentation.components.charts import gauge_chart, bar_chart
 from atlas.presentation.service_container import (
-    fetch_stock_data, fetch_stock_quote, get_indicator_lib, TW_TOP_STOCKS,
+    fetch_stock_data, fetch_stock_quote, get_indicator_lib,
+    get_realtime_service, TW_TOP_STOCKS,
 )
+
+
+@st.fragment(run_every=30)
+def _render_realtime_quotes() -> None:
+    """每 30 秒自動重跑此 fragment，優先讀 RealtimePushService 快取，
+    無快取時 fallback 到 fetch_stock_quote（TWSE MIS / yfinance）。"""
+    top_codes = [code for code, _name in TW_TOP_STOCKS[:10]]
+    name_map = dict(TW_TOP_STOCKS)
+    quote_data: dict[str, list] = {"代碼": [], "名稱": [], "現價": [], "漲跌%": []}
+
+    svc = get_realtime_service()
+    # 確保這批代碼已被訂閱（重複訂閱安全）
+    svc.subscribe(top_codes)
+
+    for code in top_codes:
+        try:
+            q = svc.get_latest(code) or fetch_stock_quote(code)
+            price = q["price"]
+            prev = q["prev_close"]
+            chg = (price - prev) / prev * 100 if prev else 0
+            quote_data["代碼"].append(code)
+            quote_data["名稱"].append(name_map.get(code, ""))
+            quote_data["現價"].append(f"{price:,.1f}")
+            quote_data["漲跌%"].append(f"{chg:+.2f}%")
+        except Exception:
+            continue
+
+    if quote_data["代碼"]:
+        source = "realtime" if svc.get_latest(top_codes[0]) else "cache"
+        st.caption(f"資料來源：{source} | 自動更新每 30 秒")
+        st.dataframe(quote_data, use_container_width=True, hide_index=True)
+    else:
+        st.info("報價載入中...")
 
 
 def render() -> None:
@@ -81,27 +115,7 @@ def render() -> None:
 
     with col_b:
         st.subheader("權值股即時報價")
-        top_codes = [c for c, n in TW_TOP_STOCKS[:10]]
-        quote_data = {"代碼": [], "名稱": [], "現價": [], "漲跌%": []}
-        name_map = dict(TW_TOP_STOCKS)
-
-        for code in top_codes:
-            try:
-                q = fetch_stock_quote(code)
-                price = q["price"]
-                prev = q["prev_close"]
-                chg = (price - prev) / prev * 100 if prev else 0
-                quote_data["代碼"].append(code)
-                quote_data["名稱"].append(name_map.get(code, ""))
-                quote_data["現價"].append(f"{price:,.1f}")
-                quote_data["漲跌%"].append(f"{chg:+.2f}%")
-            except Exception:
-                continue
-
-        if quote_data["代碼"]:
-            st.dataframe(quote_data, use_container_width=True, hide_index=True)
-        else:
-            st.info("報價載入中...")
+        _render_realtime_quotes()
 
     # ── Row 3: 持倉概覽 ────────────────────────
     st.divider()
