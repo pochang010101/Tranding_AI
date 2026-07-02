@@ -1,0 +1,167 @@
+# Docker Compose — 生產環境
+# 用法：docker compose -f docker/docker-compose.prod.yml --env-file .env.prod up -d
+#
+# 與 docker-compose.yml 的差異：
+#   - restart: always（非 unless-stopped）
+#   - app/db/redis 加資源限制
+#   - 新增 nginx service，開放 80/443
+#   - 所有服務透過 atlas-internal 內部網路通訊，外部只暴露 nginx
+
+services:
+
+  # ── Streamlit 應用程式 ────────────────────────────────
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: always
+    env_file:
+      - ../.env.prod
+    environment:
+      - ATLAS_DB_HOST=db
+      - ATLAS_REDIS_HOST=redis
+      - ATLAS_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - atlas-internal
+    # 生產環境不直接對外暴露 Streamlit port，走 nginx
+    expose:
+      - "8501"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8501/_stcore/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ── PostgreSQL 17 ─────────────────────────────────────
+  db:
+    image: postgres:17
+    restart: always
+    environment:
+      POSTGRES_DB:       ${ATLAS_DB_NAME:-atlas}
+      POSTGRES_USER:     ${ATLAS_DB_USER:-atlas}
+      POSTGRES_PASSWORD: ${ATLAS_DB_PASSWORD}   # 生產環境必須在 .env.prod 設定，無預設值
+      TZ: Asia/Taipei
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    # 生產環境不對外暴露 DB port
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ATLAS_DB_USER:-atlas}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - atlas-internal
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Redis 7 ───────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --appendonly yes
+    volumes:
+      - redisdata_prod:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - atlas-internal
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 768M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Nginx 反向代理 ────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # SSL 憑證掛載（取得憑證後取消註解）
+      # - /etc/letsencrypt/live/atlas.example.com/fullchain.pem:/etc/nginx/certs/fullchain.pem:ro
+      # - /etc/letsencrypt/live/atlas.example.com/privkey.pem:/etc/nginx/certs/privkey.pem:ro
+      # 靜態檔案（可選）
+      - ../app/static:/app/static:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - atlas-internal
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t && curl -fs http://localhost/health || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+# ── Networks ───────────────────────────────────────────────
+networks:
+  atlas-internal:
+    driver: bridge
+    internal: false   # nginx 需要對外；若全走 host network 可改 true
+
+# ── Volumes ────────────────────────────────────────────────
+volumes:
+  pgdata_prod:
+    driver: local
+  redisdata_prod:
+    driver: local
