@@ -180,7 +180,11 @@ class TWSEQuoteSource(QuoteSource):
           y=昨收, d=日期, t=時間
         """
         code = item.get("c", "")
-        price = _safe_decimal(item.get("z", item.get("y")))
+        raw_z = item.get("z")
+        # 非交易時段 z 為 "-" 或 None，改用昨收 y
+        if raw_z is None or raw_z == "-":
+            raw_z = item.get("y")
+        price = _safe_decimal(raw_z)
         yesterday = _safe_decimal(item.get("y"))
         open_price = _safe_decimal(item.get("o"))
         high = _safe_decimal(item.get("h"))
@@ -575,6 +579,12 @@ class QuoteAdapter(IQuoteAdapter):
         for src in chain:
             try:
                 quote = await src.get_quote(code)
+                # 拒絕 price=0 的報價（非交易時段常見），觸發 fallback
+                if quote.price == 0:
+                    raise DataSourceError(
+                        f"Price is 0 from {src.name} (likely outside trading hours)",
+                        source=src.name,
+                    )
                 self._source_health[src.name] = DataSourceHealth.HEALTHY
                 # 非快取來源的成功報價回寫 LastGoodCache
                 if src.name != "last_good_cache":
