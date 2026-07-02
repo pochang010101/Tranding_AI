@@ -1,6 +1,9 @@
-"""P-11 系統設定 — API 金鑰、推播通道、風控參數、市場切換。"""
+"""P-11 系統設定 — API 金鑰、推播通道、風控參數、選股參數、系統資訊。"""
 
 from __future__ import annotations
+
+import os
+import sys
 
 import streamlit as st
 
@@ -18,29 +21,54 @@ def render() -> None:
     # ── API 金鑰 ────────────────────────────────
     with tab1:
         st.subheader("資料源 API")
-        st.text_input("TWSE API Token", type="password", placeholder="已設定" if True else "未設定")
-        st.text_input("yFinance Proxy", placeholder="（選填）")
+        st.text_input("TWSE API Token", type="password",
+                     value=os.getenv("TWSE_API_TOKEN", ""),
+                     placeholder="（免費，可留空）")
+        st.text_input("yFinance Proxy", value=os.getenv("YFINANCE_PROXY", ""),
+                     placeholder="（選填）")
         st.divider()
         st.subheader("推播 API")
-        st.text_input("Discord Webhook URL", type="password", placeholder="https://discord.com/api/webhooks/...")
-        st.text_input("LINE Channel Token", type="password")
-        st.text_input("Telegram Bot Token", type="password")
+        st.text_input("Discord Webhook URL", type="password",
+                     value=os.getenv("DISCORD_WEBHOOK_URL", ""),
+                     placeholder="https://discord.com/api/webhooks/...")
+        st.text_input("LINE Channel Token", type="password",
+                     value=os.getenv("LINE_CHANNEL_TOKEN", ""))
+        st.text_input("Telegram Bot Token", type="password",
+                     value=os.getenv("TELEGRAM_BOT_TOKEN", ""))
+        st.text_input("Telegram Chat ID",
+                     value=os.getenv("TELEGRAM_CHAT_ID", ""))
         st.divider()
         st.subheader("資料庫")
-        st.text_input("PostgreSQL URL", type="password", placeholder="postgresql+asyncpg://...")
-        st.text_input("Redis URL", type="password", placeholder="redis://localhost:6379/0")
-        st.button("💾 儲存設定", type="primary", use_container_width=True)
+        db_url = os.getenv("ATLAS_DATABASE_URL", "")
+        st.text_input("PostgreSQL URL", type="password",
+                     value="***已設定***" if db_url else "",
+                     placeholder="postgresql+asyncpg://...")
+        redis_host = os.getenv("ATLAS_REDIS_HOST", "")
+        st.text_input("Redis Host",
+                     value=redis_host or "localhost",
+                     placeholder="redis://localhost:6379/0")
+
+        st.info("⚠️ API 金鑰請透過環境變數或 .env 檔案設定，此頁面僅供確認。")
 
     # ── 推播通道 ────────────────────────────────
     with tab2:
         st.subheader("通道啟用")
         ch_col1, ch_col2 = st.columns(2)
+
+        # 從環境變數判斷哪些通道已設定
+        discord_ok = bool(os.getenv("DISCORD_WEBHOOK_URL"))
+        line_ok = bool(os.getenv("LINE_CHANNEL_TOKEN"))
+        telegram_ok = bool(os.getenv("TELEGRAM_BOT_TOKEN"))
+
         with ch_col1:
-            st.checkbox("Discord", value=True)
-            st.checkbox("LINE", value=True)
+            st.checkbox("Discord", value=discord_ok,
+                       help="✅ 已設定" if discord_ok else "❌ 未設定 DISCORD_WEBHOOK_URL")
+            st.checkbox("LINE", value=line_ok,
+                       help="✅ 已設定" if line_ok else "❌ 未設定 LINE_CHANNEL_TOKEN")
         with ch_col2:
-            st.checkbox("Telegram", value=False)
-            st.checkbox("Email", value=False)
+            st.checkbox("Telegram", value=telegram_ok,
+                       help="✅ 已設定" if telegram_ok else "❌ 未設定 TELEGRAM_BOT_TOKEN")
+            st.checkbox("Email", value=False, help="需設定 SMTP")
 
         st.divider()
         st.subheader("靜音時段")
@@ -54,8 +82,41 @@ def render() -> None:
         st.subheader("頻率限制")
         st.number_input("最大發送次數（每分鐘）", value=10, min_value=1, max_value=60)
 
-        if st.button("📤 測試推播", use_container_width=True):
-            st.success("測試訊息已發送至所有啟用通道。")
+        st.divider()
+        st.subheader("推播測試")
+        test_channel = st.selectbox("測試通道", ["Discord", "LINE", "Telegram"])
+        test_msg = st.text_input("測試訊息", value="Atlas v5.0 通知測試")
+        if st.button("📤 發送測試訊息", type="primary", use_container_width=True):
+            st.info(f"正在發送至 {test_channel}...")
+            try:
+                if test_channel == "Discord" and discord_ok:
+                    import httpx
+                    webhook = os.getenv("DISCORD_WEBHOOK_URL")
+                    resp = httpx.post(webhook, json={"content": test_msg}, timeout=10)
+                    if resp.status_code in (200, 204):
+                        st.success("Discord 測試訊息發送成功！")
+                    else:
+                        st.error(f"Discord 回應：{resp.status_code}")
+                elif test_channel == "Telegram" and telegram_ok:
+                    import httpx
+                    token = os.getenv("TELEGRAM_BOT_TOKEN")
+                    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+                    if chat_id:
+                        resp = httpx.post(
+                            f"https://api.telegram.org/bot{token}/sendMessage",
+                            json={"chat_id": chat_id, "text": test_msg},
+                            timeout=10,
+                        )
+                        if resp.status_code == 200:
+                            st.success("Telegram 測試訊息發送成功！")
+                        else:
+                            st.error(f"Telegram 回應：{resp.status_code}")
+                    else:
+                        st.warning("請設定 TELEGRAM_CHAT_ID 環境變數")
+                else:
+                    st.warning(f"{test_channel} 尚未設定 API 金鑰，請先至 API 金鑰頁設定。")
+            except Exception as exc:
+                st.error(f"發送失敗：{exc}")
 
     # ── 風控參數 ────────────────────────────────
     with tab3:
@@ -102,22 +163,73 @@ def render() -> None:
         st.subheader("系統狀態")
         sys_col1, sys_col2 = st.columns(2)
         with sys_col1:
-            st.markdown(metric_card("Python", "3.14.4", status="neutral"), unsafe_allow_html=True)
-            st.markdown(metric_card("Streamlit", "1.35+", status="neutral"), unsafe_allow_html=True)
-            st.markdown(metric_card("PostgreSQL", "🟢 Connected", status="positive"),
+            py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            st.markdown(metric_card("Python", py_ver, status="neutral"),
+                       unsafe_allow_html=True)
+            try:
+                import streamlit
+                st_ver = streamlit.__version__
+            except Exception:
+                st_ver = "unknown"
+            st.markdown(metric_card("Streamlit", st_ver, status="neutral"),
+                       unsafe_allow_html=True)
+            db_status = "🟢 已設定" if os.getenv("ATLAS_DATABASE_URL") else "🔴 未設定"
+            st.markdown(metric_card("PostgreSQL", db_status,
+                       status="positive" if "🟢" in db_status else "negative"),
                        unsafe_allow_html=True)
         with sys_col2:
-            st.markdown(metric_card("Redis", "🟡 未安裝", status="neutral"), unsafe_allow_html=True)
-            st.markdown(metric_card("模組數", "69", status="neutral"), unsafe_allow_html=True)
-            st.markdown(metric_card("版本", "v5.0.0-alpha", status="neutral"), unsafe_allow_html=True)
+            redis_status = "🟢 已設定" if os.getenv("ATLAS_REDIS_HOST") else "🟡 未設定"
+            st.markdown(metric_card("Redis", redis_status, status="neutral"),
+                       unsafe_allow_html=True)
+
+            # Count actual Python modules
+            import glob
+            mod_count = len(glob.glob("atlas/**/*.py", recursive=True))
+            st.markdown(metric_card("模組數", str(mod_count), status="neutral"),
+                       unsafe_allow_html=True)
+            st.markdown(metric_card("版本", "v5.0.0-alpha", status="neutral"),
+                       unsafe_allow_html=True)
 
         st.divider()
         st.subheader("健康檢查")
         if st.button("🔍 執行健康檢查", use_container_width=True):
-            st.info("正在檢查所有組件...")
-            components = {
-                "組件": ["Database", "Cache", "QuoteAdapter", "EventBus", "Scheduler"],
-                "狀態": ["🟢 HEALTHY", "🟡 DEGRADED", "🟢 HEALTHY", "🟢 HEALTHY", "🟢 HEALTHY"],
-                "延遲(ms)": [12, None, 85, 1, 2],
+            components_result = []
+
+            # Check yfinance
+            try:
+                from atlas.presentation.service_container import fetch_stock_quote
+                q = fetch_stock_quote("2330")
+                price = q.get("price", 0)
+                components_result.append(("yFinance", "🟢 OK" if price > 0 else "🟡 No Data", "—"))
+            except Exception as e:
+                components_result.append(("yFinance", f"🔴 {e}", "—"))
+
+            # Check indicator lib
+            try:
+                from atlas.presentation.service_container import get_indicator_lib
+                lib = get_indicator_lib()
+                components_result.append(("IndicatorLib", "🟢 OK", "—"))
+            except Exception as e:
+                components_result.append(("IndicatorLib", f"🔴 {e}", "—"))
+
+            # Check SMC
+            try:
+                from atlas.presentation.service_container import get_smc_module
+                smc = get_smc_module()
+                components_result.append(("SMC Module", "🟢 OK", "—"))
+            except Exception as e:
+                components_result.append(("SMC Module", f"🔴 {e}", "—"))
+
+            # Check Monte Carlo
+            try:
+                from atlas.presentation.service_container import get_monte_carlo
+                mc = get_monte_carlo()
+                components_result.append(("Monte Carlo", "🟢 OK", "—"))
+            except Exception as e:
+                components_result.append(("Monte Carlo", f"🔴 {e}", "—"))
+
+            comp_df = {
+                "組件": [c[0] for c in components_result],
+                "狀態": [c[1] for c in components_result],
             }
-            st.dataframe(components, use_container_width=True, hide_index=True)
+            st.dataframe(comp_df, use_container_width=True, hide_index=True)

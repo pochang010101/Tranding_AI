@@ -1,88 +1,136 @@
-"""P-10 排程管理 — 排程清單、執行歷史、手動觸發。"""
+"""P-10 排程管理 — 排程清單、手動觸發、執行歷史。"""
 
 from __future__ import annotations
 
+import asyncio
 import streamlit as st
 import pandas as pd
 
 from atlas.presentation.components.theme import get_colors, metric_card
+from atlas.presentation.service_container import get_scheduler, get_workflow_engine
 
 
 def render() -> None:
     st.title("⏰ 排程管理")
     c = get_colors()
 
+    scheduler = get_scheduler()
+    wf_engine = get_workflow_engine()
+
+    # 確保預設排程已載入
+    schedules = asyncio.run(scheduler.list_schedules()) if not hasattr(st.session_state, '_sched_init') else []
+    try:
+        schedules = asyncio.run(scheduler.list_schedules())
+    except Exception:
+        schedules = []
+
     # ── 排程狀態 ────────────────────────────────
+    active = sum(1 for s in schedules if s.get("enabled"))
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.markdown(metric_card("排程服務", "🟢 運行中", status="positive"), unsafe_allow_html=True)
+        running = "🟢 運行中" if scheduler._running else "⏸️ 已停止"
+        st.markdown(metric_card("排程服務", running,
+                    status="positive" if scheduler._running else "neutral"),
+                    unsafe_allow_html=True)
     with c2:
-        st.markdown(metric_card("排程數", "6", status="neutral"), unsafe_allow_html=True)
+        st.markdown(metric_card("排程數", str(len(schedules)), status="neutral"),
+                    unsafe_allow_html=True)
     with c3:
-        st.markdown(metric_card("今日執行", "4", status="neutral"), unsafe_allow_html=True)
+        st.markdown(metric_card("啟用中", str(active), status="neutral"),
+                    unsafe_allow_html=True)
 
     # ── 排程清單 ────────────────────────────────
     st.divider()
     st.subheader("排程清單")
 
-    schedules = pd.DataFrame({
-        "名稱": ["盤前 SOP", "盤中雷達啟動", "盤中雷達停止", "盤後選股", "IPO 掃描", "月度重建"],
-        "Cron": ["0 8 * * 1-5", "0 9 * * 1-5", "30 13 * * 1-5",
-                 "0 14 * * 1-5", "0 18 * * 5", "0 6 1 * *"],
-        "工作流": ["pre_market", "intraday", "intraday_stop",
-                  "post_market", "ipo_scan", "monthly_rebuild"],
-        "啟用": [True, True, True, True, True, True],
-        "上次執行": ["今日 08:00", "今日 09:00", "—", "—", "06-28", "07-01"],
-        "狀態": ["✅ 完成", "✅ 完成", "⏳ 排程中", "⏳ 排程中", "✅ 完成", "✅ 完成"],
-    })
-
-    edited = st.data_editor(
-        schedules, use_container_width=True, hide_index=True,
-        column_config={
-            "啟用": st.column_config.CheckboxColumn(),
-        },
-        disabled=["名稱", "Cron", "工作流", "上次執行", "狀態"],
-    )
+    if schedules:
+        sched_df = pd.DataFrame(schedules)
+        sched_df = sched_df.rename(columns={
+            "name": "名稱", "cron_expr": "Cron",
+            "workflow_name": "工作流", "enabled": "啟用",
+            "last_run": "上次執行",
+        })
+        st.data_editor(
+            sched_df, use_container_width=True, hide_index=True,
+            column_config={"啟用": st.column_config.CheckboxColumn()},
+            disabled=["名稱", "Cron", "工作流", "上次執行"],
+        )
+    else:
+        st.info("尚無排程。啟動排程服務後將自動載入預設排程。")
 
     # ── 手動觸發 ────────────────────────────────
     st.divider()
+    st.subheader("手動觸發工作流")
+
+    workflow_options = [
+        "pre_market", "intraday", "post_market",
+        "ipo_scan", "weekly_report", "monthly_rebuild",
+    ]
     col_t1, col_t2 = st.columns([3, 1])
     with col_t1:
-        trigger_target = st.selectbox(
-            "選擇工作流",
-            ["pre_market", "intraday", "post_market", "ipo_scan", "monthly_rebuild"],
-        )
+        trigger_target = st.selectbox("選擇工作流", workflow_options)
     with col_t2:
-        st.write("")  # 對齊
+        st.write("")
         st.write("")
         if st.button("▶️ 手動觸發", type="primary", use_container_width=True):
-            st.success(f"已觸發工作流：{trigger_target}")
+            with st.spinner(f"執行 {trigger_target}..."):
+                try:
+                    result = asyncio.run(wf_engine.run(trigger_target))
+                    st.success(f"工作流 `{trigger_target}` 執行完成")
+                    st.json(result)
+                except Exception as exc:
+                    st.error(f"執行失敗：{exc}")
 
     # ── 執行歷史 ────────────────────────────────
     st.divider()
     st.subheader("執行歷史")
 
-    history = pd.DataFrame({
-        "時間": ["2025-07-02 14:00", "2025-07-02 13:30", "2025-07-02 09:00",
-                 "2025-07-02 08:00", "2025-07-01 14:00", "2025-07-01 09:00"],
-        "工作流": ["post_market", "intraday_stop", "intraday",
-                  "pre_market", "post_market", "intraday"],
-        "狀態": ["✅ 完成", "✅ 完成", "✅ 完成", "✅ 完成", "✅ 完成", "✅ 完成"],
-        "耗時(秒)": [45.2, 1.5, 2.1, 18.5, 52.3, 2.0],
-        "觸發方式": ["自動", "自動", "自動", "自動", "自動", "自動"],
-    })
-    st.dataframe(history, use_container_width=True, hide_index=True)
+    try:
+        history = asyncio.run(wf_engine.get_execution_history())
+    except Exception:
+        history = []
+
+    if history:
+        hist_df = pd.DataFrame(history)
+        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("尚無執行紀錄。觸發工作流後會顯示歷史。")
+
+    # ── 工作流狀態 ────────────────────────────────
+    st.divider()
+    st.subheader("各工作流狀態")
+
+    status_data = {"工作流": [], "狀態": [], "上次執行": []}
+    for wf_name in workflow_options:
+        try:
+            status = asyncio.run(wf_engine.get_status(wf_name))
+        except Exception:
+            status = {"status": "unknown"}
+        icon = {"completed": "✅", "running": "🔄", "failed": "❌",
+                "never_run": "⏳"}.get(status.get("status", ""), "❓")
+        status_data["工作流"].append(wf_name)
+        status_data["狀態"].append(f"{icon} {status.get('status', 'unknown')}")
+        status_data["上次執行"].append(status.get("last_run", "—"))
+
+    st.dataframe(status_data, use_container_width=True, hide_index=True)
 
     # ── 新增排程 ────────────────────────────────
     st.divider()
     with st.expander("➕ 新增排程"):
         nc1, nc2, nc3 = st.columns(3)
         with nc1:
-            st.text_input("排程名稱", placeholder="my_schedule")
+            new_name = st.text_input("排程名稱", placeholder="my_schedule")
         with nc2:
-            st.text_input("Cron 表達式", placeholder="0 8 * * 1-5")
+            new_cron = st.text_input("Cron 表達式", placeholder="0 8 * * 1-5")
         with nc3:
-            st.selectbox("工作流", ["pre_market", "intraday", "post_market",
-                                   "ipo_scan", "weekly_report", "monthly_rebuild"],
-                        key="new_wf")
-        st.button("新增", use_container_width=True)
+            new_wf = st.selectbox("工作流", workflow_options, key="new_wf")
+        if st.button("新增排程", use_container_width=True):
+            if new_name and new_cron:
+                try:
+                    asyncio.run(scheduler.add_schedule(new_name, new_cron, new_wf))
+                    st.success(f"已新增排程：{new_name}")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"新增失敗：{exc}")
+            else:
+                st.warning("請填入排程名稱和 Cron 表達式")

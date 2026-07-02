@@ -50,9 +50,9 @@ except Exception:
 fi
 
 # Run Alembic migrations (if alembic.ini exists)
-if [ -f "alembic.ini" ]; then
+if [ -f "alembic.ini" ] && [ -n "$ATLAS_DATABASE_URL" ]; then
     echo "Running database migrations..."
-    python -m alembic upgrade head 2>/dev/null || echo "  (no migrations to apply or alembic not configured)"
+    python -m alembic upgrade head || echo "  WARNING: Alembic migration failed"
 fi
 
 echo "=== Starting application ==="

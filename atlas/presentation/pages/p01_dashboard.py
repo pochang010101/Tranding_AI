@@ -1,4 +1,4 @@
-"""P-01 總覽儀表板 — 大盤環境 + 訊號摘要 + 持倉概覽 + 排程狀態。"""
+"""P-01 總覽儀表板 — 大盤環境 + 即時報價 + 持倉概覽 + 排程狀態。"""
 
 from __future__ import annotations
 
@@ -6,6 +6,9 @@ import streamlit as st
 
 from atlas.presentation.components.theme import get_colors, metric_card, regime_badge
 from atlas.presentation.components.charts import gauge_chart, bar_chart
+from atlas.presentation.service_container import (
+    fetch_stock_data, fetch_stock_quote, get_indicator_lib, TW_TOP_STOCKS,
+)
 
 
 def render() -> None:
@@ -13,88 +16,155 @@ def render() -> None:
     c = get_colors()
     market = st.session_state.get("market", "TW")
 
-    # ── Row 1: 大盤環境 ────────────────────────
+    # ── Row 1: 大盤環境（用加權指數 ^TWII 即時資料）──
     st.subheader("大盤環境")
+
+    # 取加權指數資料判斷環境
+    idx_df = fetch_stock_data("^TWII" if market == "TW" else "^GSPC", "3mo")
+    regime_text, regime_status, regime_badge_val = "N/A", "neutral", "RANGE"
+    sentiment_val = 50
+    breadth_text = "—"
+    adl_text = "—"
+
+    if idx_df is not None and not idx_df.empty:
+        lib = get_indicator_lib()
+        idx_ind = lib.calculate_all(idx_df)
+
+        # 判斷趨勢：MA8 > MA21 > MA55 → 多頭
+        ma8 = idx_ind["MA8"].iloc[-1] if "MA8" in idx_ind.columns else 0
+        ma21 = idx_ind["MA21"].iloc[-1] if "MA21" in idx_ind.columns else 0
+        close = idx_df["close"].iloc[-1]
+
+        if ma8 > ma21 and close > ma8:
+            regime_text, regime_status, regime_badge_val = "多頭", "positive", "BULL"
+        elif ma8 < ma21 and close < ma8:
+            regime_text, regime_status, regime_badge_val = "空頭", "negative", "BEAR"
+        else:
+            regime_text, regime_status, regime_badge_val = "盤整", "neutral", "RANGE"
+
+        # RSI 作為情緒指數
+        rsi = idx_ind["RSI14"].iloc[-1] if "RSI14" in idx_ind.columns else 50
+        sentiment_val = int(rsi) if rsi == rsi else 50  # NaN check
+
+        # 漲跌幅
+        prev = idx_df["close"].iloc[-2] if len(idx_df) >= 2 else close
+        change_pct = (close - prev) / prev * 100 if prev else 0
+        adl_text = f"{change_pct:+.2f}%"
+        breadth_text = f"RSI={sentiment_val}"
+
     col1, col2, col3, col4 = st.columns(4)
-
     with col1:
-        st.markdown(metric_card("大盤趨勢", "多頭", status="positive"), unsafe_allow_html=True)
-        st.markdown(regime_badge("BULL"), unsafe_allow_html=True)
-
+        st.markdown(metric_card("大盤趨勢", regime_text, status=regime_status),
+                    unsafe_allow_html=True)
+        st.markdown(regime_badge(regime_badge_val), unsafe_allow_html=True)
     with col2:
-        st.markdown(metric_card("市場情緒", "62", delta="GREED", status="positive"),
+        st.markdown(metric_card("情緒指數", str(sentiment_val),
+                    status="positive" if sentiment_val > 55 else
+                    "negative" if sentiment_val < 45 else "neutral"),
                     unsafe_allow_html=True)
-
     with col3:
-        st.markdown(metric_card("市場寬度", "68%", delta="站上 MA20", status="positive"),
+        st.markdown(metric_card("技術指標", breadth_text, status="neutral"),
                     unsafe_allow_html=True)
-
     with col4:
-        st.markdown(metric_card("漲跌比", "1.32", delta="偏多", status="positive"),
+        st.markdown(metric_card("大盤漲跌", adl_text,
+                    status="positive" if "+" in adl_text else "negative" if "-" in adl_text else "neutral"),
                     unsafe_allow_html=True)
 
-    # ── Row 2: 情緒儀表 + 今日訊號 ─────────────
+    # ── Row 2: 情緒儀表 + 權值股即時報價 ─────────
     st.divider()
     col_a, col_b = st.columns([1, 2])
 
     with col_a:
         st.subheader("情緒指數")
-        fig = gauge_chart(62, title="Fear & Greed", min_val=0, max_val=100)
+        fig = gauge_chart(sentiment_val, title="Fear & Greed", min_val=0, max_val=100)
         st.plotly_chart(fig, use_container_width=True)
 
     with col_b:
-        st.subheader("今日訊號摘要")
-        # Demo 資料
-        demo_signals = {
-            "標的": ["2330", "2454", "3008", "2881", "6547"],
-            "策略": ["S1_突破", "O2_跳空", "K1_扣抵", "P2_型態", "T1_RSI"],
-            "方向": ["🟢 BUY", "🟢 BUY", "🟢 BUY", "🔴 SELL", "🟢 BUY"],
-            "等級": ["Lv5", "Lv4", "Lv4", "Lv2", "Lv3"],
-            "觸發價": [890.0, 1285.0, 195.5, 68.3, 132.0],
-        }
-        st.dataframe(demo_signals, use_container_width=True, hide_index=True)
+        st.subheader("權值股即時報價")
+        top_codes = [c for c, n in TW_TOP_STOCKS[:10]]
+        quote_data = {"代碼": [], "名稱": [], "現價": [], "漲跌%": []}
+        name_map = dict(TW_TOP_STOCKS)
+
+        for code in top_codes:
+            try:
+                q = fetch_stock_quote(code)
+                price = q["price"]
+                prev = q["prev_close"]
+                chg = (price - prev) / prev * 100 if prev else 0
+                quote_data["代碼"].append(code)
+                quote_data["名稱"].append(name_map.get(code, ""))
+                quote_data["現價"].append(f"{price:,.1f}")
+                quote_data["漲跌%"].append(f"{chg:+.2f}%")
+            except Exception:
+                continue
+
+        if quote_data["代碼"]:
+            st.dataframe(quote_data, use_container_width=True, hide_index=True)
+        else:
+            st.info("報價載入中...")
 
     # ── Row 3: 持倉概覽 ────────────────────────
     st.divider()
     st.subheader("持倉概覽")
 
+    # 從 session_state 讀取紙上交易持倉
+    pt_positions = st.session_state.get("pt_positions", [])
+    pt_orders = st.session_state.get("pt_orders", [])
+    pt_capital = st.session_state.get("pt_capital", 1_000_000)
+    eq = st.session_state.get("pt_equity_curve", [pt_capital])
+    sell_orders = [o for o in pt_orders if o.get("方向") == "賣出"]
+    total_pnl = sum(o.get("損益", 0) for o in sell_orders)
+    wins = sum(1 for o in sell_orders if o.get("損益", 0) > 0)
+    win_rate = wins / len(sell_orders) * 100 if sell_orders else 0
+
     col_p1, col_p2, col_p3, col_p4 = st.columns(4)
     with col_p1:
-        st.markdown(metric_card("持倉數", "5", status="neutral"), unsafe_allow_html=True)
+        st.markdown(metric_card("持倉數", str(len(pt_positions)), status="neutral"),
+                    unsafe_allow_html=True)
     with col_p2:
-        st.markdown(metric_card("未實現損益", "+$42,300", delta="+2.1%", status="positive"),
+        st.markdown(metric_card("累計損益", f"${total_pnl:+,.0f}",
+                    status="positive" if total_pnl >= 0 else "negative"),
                     unsafe_allow_html=True)
     with col_p3:
-        st.markdown(metric_card("今日損益", "+$8,500", delta="+0.4%", status="positive"),
+        st.markdown(metric_card("交易次數", str(len(sell_orders)), status="neutral"),
                     unsafe_allow_html=True)
     with col_p4:
-        st.markdown(metric_card("勝率", "65.2%", delta="avg R=1.8", status="positive"),
+        st.markdown(metric_card("勝率", f"{win_rate:.1f}%",
+                    status="positive" if win_rate >= 50 else "negative" if win_rate > 0 else "neutral"),
                     unsafe_allow_html=True)
 
-    # ── Row 4: 四主軸分佈 ──────────────────────
+    # ── Row 4: Top 5 權值股走勢 + 排程 ──────────
     st.divider()
     col_c1, col_c2 = st.columns(2)
 
     with col_c1:
-        st.subheader("候選清單 — 四主軸分數")
-        fig = bar_chart(
-            labels=["2330", "2454", "3008", "6547", "2881"],
-            values=[82.5, 76.3, 71.8, 68.5, 55.2],
-            title="Top 5 主軸總分",
-            height=350,
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.subheader("Top 5 權值股 — RSI")
+        rsi_labels, rsi_values = [], []
+        for code, name in TW_TOP_STOCKS[:5]:
+            try:
+                df = fetch_stock_data(code, "3mo")
+                if df is not None and not df.empty:
+                    ind = get_indicator_lib().calculate_all(df)
+                    rsi = ind["RSI14"].iloc[-1]
+                    if rsi == rsi:  # NaN check
+                        rsi_labels.append(f"{code}\n{name}")
+                        rsi_values.append(round(rsi, 1))
+            except Exception:
+                continue
+        if rsi_labels:
+            fig = bar_chart(rsi_labels, rsi_values, title="RSI14", height=350)
+            st.plotly_chart(fig, use_container_width=True)
 
     with col_c2:
         st.subheader("排程狀態")
         schedules = {
             "工作流": ["盤前 SOP", "盤中雷達", "盤後選股", "月度重建"],
-            "狀態": ["✅ 完成", "🔄 執行中", "⏳ 排程中", "✅ 完成"],
-            "上次執行": ["08:30", "進行中", "—", "07-01"],
-            "下次執行": ["明日 08:00", "—", "今日 14:00", "08-01"],
+            "Cron": ["0 8 * * 1-5", "0 9 * * 1-5", "45 13 * * 1-5", "0 20 * * 0"],
+            "狀態": ["⏳ 排程中", "⏳ 排程中", "⏳ 排程中", "⏳ 排程中"],
         }
         st.dataframe(schedules, use_container_width=True, hide_index=True)
 
     # Footer
     st.divider()
-    st.caption(f"市場：{market} | 資料更新時間：即時 | Atlas v5.0")
+    from datetime import datetime
+    st.caption(f"市場：{market} | 更新時間：{datetime.now().strftime('%H:%M:%S')} | Atlas v5.0")

@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-import streamlit as st
-import pandas as pd
+from collections import Counter
 
-from atlas.presentation.components.theme import get_colors, metric_card
+import pandas as pd
+import streamlit as st
+
 from atlas.presentation.components.charts import bar_chart
+from atlas.presentation.components.theme import get_colors, metric_card
+from atlas.presentation.service_container import (
+    TW_TOP_STOCKS,
+    fetch_stock_data,
+    fetch_stock_quote,
+    get_indicator_lib,
+)
 
 
 def render() -> None:
@@ -14,15 +22,23 @@ def render() -> None:
     c = get_colors()
 
     # ── 雷達狀態 ────────────────────────────────
+    radar_running: bool = st.session_state.get("radar_running", False)
+    signals: list[dict] = st.session_state.get("radar_signals", [])
+
+    buy_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "BUY")
+    sell_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "SELL")
+
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.markdown(metric_card("雷達狀態", "🟢 執行中", status="positive"), unsafe_allow_html=True)
+        status_label = "🟢 執行中" if radar_running else "🔴 已停止"
+        status_color = "positive" if radar_running else "negative"
+        st.markdown(metric_card("雷達狀態", status_label, status=status_color), unsafe_allow_html=True)
     with col2:
-        st.markdown(metric_card("今日告警", "23", status="neutral"), unsafe_allow_html=True)
+        st.markdown(metric_card("今日告警", str(len(signals)), status="neutral"), unsafe_allow_html=True)
     with col3:
-        st.markdown(metric_card("買入訊號", "5", status="positive"), unsafe_allow_html=True)
+        st.markdown(metric_card("買入訊號", str(buy_count), status="positive"), unsafe_allow_html=True)
     with col4:
-        st.markdown(metric_card("賣出訊號", "2", status="negative"), unsafe_allow_html=True)
+        st.markdown(metric_card("賣出訊號", str(sell_count), status="negative"), unsafe_allow_html=True)
 
     # ── 偵測器開關 ──────────────────────────────
     st.divider()
@@ -42,26 +58,33 @@ def render() -> None:
     st.divider()
     st.subheader("即時訊號")
 
-    signals_df = pd.DataFrame({
-        "時間": ["10:32:15", "10:28:43", "10:15:22", "09:55:10", "09:42:38",
-                 "09:30:05", "09:15:22"],
-        "偵測器": ["爆量啟動", "大單異常", "起漲觸發", "產業急拉", "均線跌破",
-                  "爆量啟動", "大單異常"],
-        "代碼": ["2454", "3008", "6547", "半導體族群", "2881", "2330", "2317"],
-        "方向": ["🟢 BUY", "🟢 BUY", "🟢 BUY", "🟡 ALERT", "🔴 SELL",
-                "🟢 BUY", "🟢 BUY"],
-        "觸發價": [1285, 195.5, 132, None, 68.3, 890, 165],
-        "嚴重度": [4, 3, 3, 4, 3, 5, 2],
-        "細節": [
-            "量能突破5日均量3倍", "連續大單買超", "突破前高+量增",
-            "半導體族群5檔同步拉升", "跌破MA21", "開盤爆量突破",
-            "法人大單進場",
-        ],
-    })
-    st.dataframe(signals_df, use_container_width=True, hide_index=True,
-                 column_config={
-                     "嚴重度": st.column_config.NumberColumn(format="%d ⭐"),
-                 })
+    if not signals:
+        st.info("目前無訊號。雷達啟動後訊號將即時顯示於此。")
+    else:
+        direction_icon = {"BUY": "🟢 BUY", "SELL": "🔴 SELL", "ALERT": "🟡 ALERT"}
+
+        rows = []
+        for s in signals:
+            raw_dir = str(s.get("direction", "")).upper()
+            rows.append({
+                "時間": s.get("time", ""),
+                "偵測器": s.get("detector", ""),
+                "代碼": s.get("code", ""),
+                "方向": direction_icon.get(raw_dir, raw_dir),
+                "觸發價": s.get("price"),
+                "嚴重度": s.get("severity", 1),
+                "細節": s.get("detail", ""),
+            })
+
+        signals_df = pd.DataFrame(rows)
+        st.dataframe(
+            signals_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "嚴重度": st.column_config.NumberColumn(format="%d ⭐"),
+            },
+        )
 
     # ── 偵測器統計 ──────────────────────────────
     st.divider()
@@ -69,34 +92,76 @@ def render() -> None:
 
     with col_a:
         st.subheader("偵測器觸發統計")
-        det_names = ["爆量啟動", "大單異常", "起漲觸發", "產業急拉", "均線跌破"]
-        det_counts = [8, 5, 4, 3, 3]
-        fig = bar_chart(det_names, det_counts, title="今日觸發次數",
-                       horizontal=True, height=350)
-        st.plotly_chart(fig, use_container_width=True)
+        if signals:
+            det_counter = Counter(s.get("detector", "") for s in signals if s.get("detector"))
+            det_names, det_counts = zip(*det_counter.most_common(10)) if det_counter else ([], [])
+            fig = bar_chart(list(det_names), list(det_counts), title="今日觸發次數",
+                            horizontal=True, height=350)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("無訊號資料。")
 
     with col_b:
         st.subheader("熱門標的")
-        hot_codes = ["2330", "2454", "3008", "6547", "2317"]
-        hot_counts = [5, 4, 3, 2, 2]
-        fig = bar_chart(hot_codes, hot_counts, title="觸發次數 by 標的",
-                       horizontal=True, height=350)
-        st.plotly_chart(fig, use_container_width=True)
+        if signals:
+            code_counter = Counter(s.get("code", "") for s in signals if s.get("code"))
+            hot_codes, hot_counts = zip(*code_counter.most_common(10)) if code_counter else ([], [])
+            fig = bar_chart(list(hot_codes), list(hot_counts), title="觸發次數 by 標的",
+                            horizontal=True, height=350)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("無訊號資料。")
 
     # ── 持倉即時損益 ────────────────────────────
     st.divider()
     st.subheader("持倉即時損益")
-    positions_df = pd.DataFrame({
-        "代碼": ["2330", "2454", "3008"],
-        "進場價": [880, 1250, 190],
-        "現價": [892, 1240, 198],
-        "張數": [2, 1, 3],
-        "未實現損益": [24000, -10000, 24000],
-        "損益%": [1.36, -0.80, 4.21],
-        "R倍數": [0.8, -0.5, 1.6],
-    })
-    st.dataframe(positions_df, use_container_width=True, hide_index=True,
-                 column_config={
-                     "損益%": st.column_config.NumberColumn(format="%+.2f%%"),
-                     "未實現損益": st.column_config.NumberColumn(format="$%+,d"),
-                 })
+
+    pt_positions: list[dict] = st.session_state.get("pt_positions", [])
+
+    if not pt_positions:
+        st.info("目前無持倉。")
+    else:
+        rows = []
+        for pos in pt_positions:
+            code = str(pos.get("代碼", ""))
+            name = pos.get("名稱", code)
+            entry_price = float(pos.get("進場價", 0) or 0)
+            lots = int(pos.get("張數", 0) or 0)
+            stop_loss = pos.get("停損")
+            take_profit = pos.get("停利")
+
+            quote = fetch_stock_quote(code)
+            current_price = quote.get("price", 0) or entry_price
+
+            # 每張 = 1000 股
+            pnl = (current_price - entry_price) * lots * 1000
+            pnl_pct = ((current_price - entry_price) / entry_price * 100) if entry_price else 0
+            r_multiple = None
+            if stop_loss and entry_price and entry_price != float(stop_loss):
+                risk_per_share = entry_price - float(stop_loss)
+                if risk_per_share != 0:
+                    r_multiple = round((current_price - entry_price) / risk_per_share, 2)
+
+            rows.append({
+                "代碼": code,
+                "名稱": name,
+                "進場價": entry_price,
+                "現價": current_price,
+                "張數": lots,
+                "停損": stop_loss,
+                "停利": take_profit,
+                "未實現損益": round(pnl),
+                "損益%": round(pnl_pct, 2),
+                "R倍數": r_multiple,
+            })
+
+        positions_df = pd.DataFrame(rows)
+        st.dataframe(
+            positions_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "損益%": st.column_config.NumberColumn(format="%+.2f%%"),
+                "未實現損益": st.column_config.NumberColumn(format="$%+,d"),
+            },
+        )

@@ -1,4 +1,4 @@
-"""P-02 盤前分析 — 美股收盤、台指期夜盤、情緒、缺口預測。"""
+"""P-02 盤前分析 — 美股收盤、代表股、台指期參考、缺口預測。"""
 
 from __future__ import annotations
 
@@ -6,81 +6,126 @@ import streamlit as st
 
 from atlas.presentation.components.theme import get_colors, metric_card, regime_badge
 from atlas.presentation.components.charts import bar_chart, gauge_chart
+from atlas.presentation.service_container import fetch_stock_quote, fetch_stock_data, get_indicator_lib
 
 
 def render() -> None:
     st.title("🌏 盤前分析")
     c = get_colors()
 
-    # ── 美股四大指數 ────────────────────────────
-    st.subheader("美股四大指數（昨日收盤）")
+    # ── 美股四大指數（即時 yfinance）────────────
+    st.subheader("美股四大指數")
     c1, c2, c3, c4 = st.columns(4)
-    indices = [
-        ("道瓊 DJI", "42,850", "+0.35%", "positive"),
-        ("S&P 500", "5,920", "+0.52%", "positive"),
-        ("NASDAQ", "19,250", "+0.78%", "positive"),
-        ("費半 SOX", "5,180", "+1.25%", "positive"),
+    us_indices = [
+        ("道瓊 DJI", "^DJI"),
+        ("S&P 500", "^GSPC"),
+        ("NASDAQ", "^IXIC"),
+        ("費半 SOX", "^SOX"),
     ]
-    for col, (name, val, delta, status) in zip([c1, c2, c3, c4], indices):
+    for col, (name, ticker) in zip([c1, c2, c3, c4], us_indices):
         with col:
-            st.markdown(metric_card(name, val, delta, status), unsafe_allow_html=True)
+            try:
+                q = fetch_stock_quote(ticker)
+                price = q["price"]
+                prev = q["prev_close"]
+                chg = (price - prev) / prev * 100 if prev else 0
+                st.markdown(metric_card(
+                    name, f"{price:,.0f}", f"{chg:+.2f}%",
+                    "positive" if chg > 0 else "negative" if chg < 0 else "neutral"
+                ), unsafe_allow_html=True)
+            except Exception:
+                st.markdown(metric_card(name, "—", status="neutral"), unsafe_allow_html=True)
 
     # ── 代表性美股 ──────────────────────────────
     st.divider()
     st.subheader("8 檔代表性美股")
-    stocks = {
-        "代碼": ["AAPL", "NVDA", "TSM", "MSFT", "GOOGL", "AMZN", "META", "AVGO"],
-        "名稱": ["Apple", "NVIDIA", "台積電ADR", "Microsoft", "Google", "Amazon", "Meta", "Broadcom"],
-        "收盤價": [195.2, 135.8, 178.5, 430.1, 175.3, 195.7, 510.2, 175.6],
-        "漲跌%": [+0.8, +2.1, +1.5, +0.3, +0.5, +0.7, +1.2, +1.8],
-    }
-    st.dataframe(stocks, use_container_width=True, hide_index=True,
-                 column_config={"漲跌%": st.column_config.NumberColumn(format="%+.1f%%")})
+    us_stocks = [
+        ("AAPL", "Apple"), ("NVDA", "NVIDIA"), ("TSM", "台積電ADR"),
+        ("MSFT", "Microsoft"), ("GOOGL", "Google"), ("AMZN", "Amazon"),
+        ("META", "Meta"), ("AVGO", "Broadcom"),
+    ]
+    stock_data = {"代碼": [], "名稱": [], "收盤價": [], "漲跌%": []}
+    for ticker, name in us_stocks:
+        try:
+            q = fetch_stock_quote(ticker)
+            price = q["price"]
+            prev = q["prev_close"]
+            chg = (price - prev) / prev * 100 if prev else 0
+            stock_data["代碼"].append(ticker)
+            stock_data["名稱"].append(name)
+            stock_data["收盤價"].append(f"{price:,.1f}")
+            stock_data["漲跌%"].append(round(chg, 2))
+        except Exception:
+            continue
 
-    # ── 台指期夜盤 + 缺口預測 ──────────────────
+    if stock_data["代碼"]:
+        st.dataframe(stock_data, use_container_width=True, hide_index=True,
+                     column_config={"漲跌%": st.column_config.NumberColumn(format="%+.1f%%")})
+
+    # ── 台股指數 + 大盤環境 ──────────────────────
     st.divider()
     col_a, col_b = st.columns(2)
 
     with col_a:
-        st.subheader("台指期夜盤")
-        st.markdown(metric_card("台指期", "22,350", "+85 (+0.38%)", "positive"),
-                    unsafe_allow_html=True)
-        st.markdown(metric_card("小台期", "22,345", "+83 (+0.37%)", "positive"),
-                    unsafe_allow_html=True)
+        st.subheader("台股加權指數")
+        try:
+            tw_q = fetch_stock_quote("^TWII")
+            tw_price = tw_q["price"]
+            tw_prev = tw_q["prev_close"]
+            tw_chg = (tw_price - tw_prev) / tw_prev * 100 if tw_prev else 0
+            st.markdown(metric_card("加權指數", f"{tw_price:,.0f}",
+                        f"{tw_chg:+.2f}%",
+                        "positive" if tw_chg > 0 else "negative"),
+                        unsafe_allow_html=True)
+        except Exception:
+            st.markdown(metric_card("加權指數", "—", status="neutral"),
+                        unsafe_allow_html=True)
+
+        # 缺口預測因子
+        st.subheader("缺口預測因子")
+        factors = ["費半指數", "S&P500", "NASDAQ", "台積ADR"]
+        try:
+            sox_q = fetch_stock_quote("^SOX")
+            sp_q = fetch_stock_quote("^GSPC")
+            nq_q = fetch_stock_quote("^IXIC")
+            tsm_q = fetch_stock_quote("TSM")
+            factor_chgs = [
+                (sox_q["price"] - sox_q["prev_close"]) / sox_q["prev_close"] * 100 if sox_q["prev_close"] else 0,
+                (sp_q["price"] - sp_q["prev_close"]) / sp_q["prev_close"] * 100 if sp_q["prev_close"] else 0,
+                (nq_q["price"] - nq_q["prev_close"]) / nq_q["prev_close"] * 100 if nq_q["prev_close"] else 0,
+                (tsm_q["price"] - tsm_q["prev_close"]) / tsm_q["prev_close"] * 100 if tsm_q["prev_close"] else 0,
+            ]
+            fig = bar_chart(factors, [round(v, 2) for v in factor_chgs],
+                           title="各因子漲跌幅 %", color_by_value=True, height=300)
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception:
+            st.info("因子資料載入中...")
 
     with col_b:
-        st.subheader("缺口預測")
-        st.markdown(metric_card("預測方向", "⬆️ 跳空上漲", status="positive"),
-                    unsafe_allow_html=True)
-        st.markdown(metric_card("預測幅度", "+0.45%", delta="信心度 72%", status="positive"),
-                    unsafe_allow_html=True)
-
-        factors = ["台指期夜盤", "費半指數", "S&P500", "ADR溢價"]
-        weights = [0.38, 0.25, 0.20, 0.15]
-        fig = bar_chart(factors, [w * 100 for w in weights],
-                       title="缺口預測因子權重 %", height=300)
-        st.plotly_chart(fig, use_container_width=True)
-
-    # ── 大盤環境 + 情緒 ────────────────────────
-    st.divider()
-    col_r1, col_r2 = st.columns(2)
-
-    with col_r1:
         st.subheader("大盤環境")
-        st.markdown(regime_badge("BULL"), unsafe_allow_html=True)
-        st.markdown(metric_card("趨勢強度", "2.8", delta="均線多頭排列", status="positive"),
-                    unsafe_allow_html=True)
+        idx_df = fetch_stock_data("^TWII", "3mo")
+        if idx_df is not None and not idx_df.empty:
+            lib = get_indicator_lib()
+            ind = lib.calculate_all(idx_df)
+            ma8 = ind["MA8"].iloc[-1] if "MA8" in ind.columns else 0
+            ma21 = ind["MA21"].iloc[-1] if "MA21" in ind.columns else 0
+            close = idx_df["close"].iloc[-1]
 
-    with col_r2:
-        st.subheader("市場情緒")
-        fig = gauge_chart(62, title="情緒指數", height=250)
-        st.plotly_chart(fig, use_container_width=True)
+            if ma8 > ma21 and close > ma8:
+                st.markdown(regime_badge("BULL"), unsafe_allow_html=True)
+                st.markdown(metric_card("趨勢", "多頭排列", status="positive"),
+                            unsafe_allow_html=True)
+            elif ma8 < ma21 and close < ma8:
+                st.markdown(regime_badge("BEAR"), unsafe_allow_html=True)
+                st.markdown(metric_card("趨勢", "空頭排列", status="negative"),
+                            unsafe_allow_html=True)
+            else:
+                st.markdown(regime_badge("RANGE"), unsafe_allow_html=True)
+                st.markdown(metric_card("趨勢", "盤整", status="neutral"),
+                            unsafe_allow_html=True)
 
-    # ── 盤前摘要 ────────────────────────────────
-    st.divider()
-    st.subheader("📋 盤前摘要")
-    st.info("""
-    **今日研判**：美股三大指數收紅，費半領漲 +1.25%。台指期夜盤上漲 85 點。
-    預測台股開盤小幅跳空上漲約 0.45%。大盤維持多頭格局，情緒偏貪婪。
-    建議關注半導體族群輪動。
-    """)
+            rsi = ind["RSI14"].iloc[-1] if "RSI14" in ind.columns else 50
+            rsi = int(rsi) if rsi == rsi else 50
+            st.subheader("市場情緒")
+            fig = gauge_chart(rsi, title="RSI 情緒指數", height=250)
+            st.plotly_chart(fig, use_container_width=True)
