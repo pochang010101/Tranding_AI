@@ -11,7 +11,8 @@
       "Bash(docker info:*)",
       "Bash(curl:*)",
       "Bash(ls:*)",
-      "Bash(gh repo:*)"
+      "Bash(gh repo:*)",
+      "Bash(gh auth:*)"
     ]
   }
 }
