@@ -106,6 +106,10 @@ class WorkflowEngine(IWorkflowEngine):
                 "elapsed_sec": round(elapsed, 1),
             }
             logger.info("Workflow '%s' completed in %.1fs", workflow_name, elapsed)
+
+            # 自動推播工作流完成通知
+            await self._notify_workflow_done(workflow_name, result, elapsed)
+
             return result
 
         except Exception as exc:
@@ -298,3 +302,84 @@ class WorkflowEngine(IWorkflowEngine):
             codes = await self._universe.build_universe(self._market, force_rebuild=True)
             return {"status": "rebuilt", "universe_size": len(codes)}
         return {"status": "no_universe_manager"}
+
+    # ── 通知推播 ────────────────────────────────
+
+    async def _notify_workflow_done(
+        self,
+        workflow_name: str,
+        result: dict[str, Any],
+        elapsed: float,
+    ) -> None:
+        """工作流完成後自動推播通知。"""
+        if not self._notification:
+            return
+
+        from atlas.models.notification import NotificationPayload
+
+        title_map = {
+            "pre_market": "盤前分析完成",
+            "intraday": "盤中雷達已啟動",
+            "post_market": "盤後選股完成",
+            "ipo_scan": "IPO 掃描完成",
+            "weekly_report": "週報已產出",
+            "monthly_rebuild": "月度重建完成",
+        }
+        title = f"📊 {title_map.get(workflow_name, workflow_name)}"
+        body = self._format_workflow_body(workflow_name, result, elapsed)
+        priority = 3 if workflow_name in ("post_market", "weekly_report") else 2
+
+        payload = NotificationPayload(
+            title=title,
+            body=body,
+            channel="discord",
+            priority=priority,
+            category="daily_report" if "market" in workflow_name or "report" in workflow_name else "system",
+            mute_check=True,
+        )
+
+        try:
+            await self._notification.send(payload)
+        except Exception as exc:
+            logger.warning("Notification failed for '%s': %s", workflow_name, exc)
+
+    @staticmethod
+    def _format_workflow_body(
+        workflow_name: str,
+        result: dict[str, Any],
+        elapsed: float,
+    ) -> str:
+        """格式化工作流結果為推播訊息。"""
+        lines = [f"⏱ 耗時 {elapsed:.1f}s"]
+
+        if workflow_name == "pre_market":
+            if "gap_prediction" in result:
+                lines.append(f"缺口預測: {result['gap_prediction']}")
+            if "regime" in result:
+                lines.append(f"環境: {result['regime'].get('state', '?')}")
+            if "sentiment" in result:
+                lines.append(f"情緒: {result['sentiment'].get('level', '?')}")
+
+        elif workflow_name == "post_market":
+            if "scan_count" in result:
+                lines.append(f"掃描結果: {result['scan_count']} 檔")
+            top5 = result.get("top_5", [])
+            if top5:
+                lines.append("Top 5:")
+                for s in top5:
+                    lines.append(f"  • {s['code']} ({s['level']}) {s['score']:.1f}分")
+            if "data_update" in result:
+                du = result["data_update"]
+                lines.append(f"資料更新: {du.get('daily_bars', 0)} 筆日K")
+
+        elif workflow_name == "ipo_scan":
+            lines.append(f"即將申購: {result.get('upcoming_count', 0)} 檔")
+
+        elif workflow_name == "weekly_report":
+            lines.append(f"持倉: {result.get('open_positions', 0)} 筆")
+            lines.append(f"本週執行: {result.get('post_market_runs', 0)} 次盤後")
+
+        elif workflow_name == "monthly_rebuild":
+            lines.append(f"股票池: {result.get('universe_size', 0)} 檔")
+
+        return "\n".join(lines)

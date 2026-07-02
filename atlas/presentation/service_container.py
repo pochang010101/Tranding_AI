@@ -63,16 +63,47 @@ def get_portfolio_manager():
 
 
 @st.cache_resource
+def get_notification_hub():
+    """根據環境變數初始化 NotificationHub + adapters。"""
+    import os
+    from atlas.infrastructure.notification_hub import NotificationHub
+
+    hub = NotificationHub()
+
+    # Discord
+    discord_url = os.getenv("DISCORD_WEBHOOK_URL", "")
+    if discord_url:
+        from atlas.infrastructure.notifications.discord import DiscordAdapter
+        hub.add_adapter(DiscordAdapter(discord_url))
+
+    # Telegram
+    tg_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    tg_chat = os.getenv("TELEGRAM_CHAT_ID", "")
+    if tg_token and tg_chat:
+        from atlas.infrastructure.notifications.telegram import TelegramAdapter
+        hub.add_adapter(TelegramAdapter(tg_token, tg_chat))
+
+    # LINE
+    line_token = os.getenv("LINE_CHANNEL_TOKEN", "")
+    line_secret = os.getenv("LINE_CHANNEL_SECRET", "")
+    if line_token:
+        from atlas.infrastructure.notifications.line import LineAdapter
+        hub.add_adapter(LineAdapter(line_token, line_secret))
+
+    return hub
+
+
+@st.cache_resource
 def get_workflow_engine():
     from atlas.application.workflow_engine import WorkflowEngine
-    return WorkflowEngine()
+    hub = get_notification_hub()
+    return WorkflowEngine(notification=hub)
 
 
 @st.cache_resource
 def get_scheduler():
     from atlas.application.scheduler import Scheduler
-    from atlas.application.workflow_engine import WorkflowEngine
-    wf = WorkflowEngine()
+    wf = get_workflow_engine()
     return Scheduler(workflow_engine=wf)
 
 
@@ -98,11 +129,19 @@ def fetch_stock_data(code: str, period: str = "6mo") -> Any:
 
 
 def fetch_stock_quote(code: str) -> dict[str, Any]:
-    """用 yfinance 取得即時報價（快取 5 分鐘）。"""
-    import yfinance as yf
+    """取得即時報價（快取 5 分鐘）。台股優先用 TWSE MIS，失敗 fallback yfinance。"""
 
     @st.cache_data(ttl=300)
     def _fetch_quote(code: str) -> dict:
+        # 台股：先嘗試 TWSE MIS API
+        if code.isdigit():
+            try:
+                return _fetch_twse_quote(code)
+            except Exception:
+                pass  # fallback to yfinance
+
+        # yfinance fallback
+        import yfinance as yf
         suffix = ".TW" if code.isdigit() else ""
         ticker = yf.Ticker(f"{code}{suffix}")
         info = ticker.fast_info
@@ -114,12 +153,140 @@ def fetch_stock_quote(code: str) -> dict[str, Any]:
                 "day_high": float(info.day_high or 0),
                 "day_low": float(info.day_low or 0),
                 "volume": int(info.last_volume or 0),
+                "source": "yfinance",
             }
         except Exception:
             return {"price": 0, "prev_close": 0, "open": 0,
-                    "day_high": 0, "day_low": 0, "volume": 0}
+                    "day_high": 0, "day_low": 0, "volume": 0, "source": "error"}
 
     return _fetch_quote(code)
+
+
+def _fetch_twse_quote(code: str) -> dict[str, Any]:
+    """直接呼叫 TWSE MIS API 取得台股即時報價。"""
+    import httpx
+    import time as _time
+
+    url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
+    params = {
+        "ex_ch": f"tse_{code}.tw",
+        "json": "1",
+        "_": str(int(_time.time() * 1000)),
+    }
+    resp = httpx.get(url, params=params, timeout=8, headers={
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+    }, follow_redirects=True)
+    resp.raise_for_status()
+    data = resp.json()
+    items = data.get("msgArray", [])
+    if not items:
+        raise ValueError("TWSE MIS returned empty msgArray")
+
+    item = items[0]
+    raw_z = item.get("z")
+    if raw_z is None or raw_z == "-":
+        raw_z = item.get("y")  # fallback to yesterday close
+    price = float(raw_z) if raw_z and raw_z != "-" else 0
+    prev = float(item.get("y", 0) or 0)
+    open_p = float(item.get("o", 0) or 0)
+    high = float(item.get("h", 0) or 0)
+    low = float(item.get("l", 0) or 0)
+    vol_str = item.get("v", "0")
+    volume = int(vol_str) * 1000 if vol_str and vol_str != "-" else 0
+
+    if price == 0:
+        raise ValueError(f"TWSE MIS price=0 for {code}")
+
+    return {
+        "price": price,
+        "prev_close": prev,
+        "open": open_p,
+        "day_high": high,
+        "day_low": low,
+        "volume": volume,
+        "source": "twse_mis",
+    }
+
+
+def fetch_institutional_flow(code: str, days: int = 5) -> dict[str, Any]:
+    """取得三大法人近N日買賣超（快取 30 分鐘）。"""
+    import httpx
+    import time as _time
+
+    @st.cache_data(ttl=1800)
+    def _fetch(code: str, days: int) -> dict:
+        from datetime import date, timedelta
+        today = date.today()
+        date_str = today.strftime("%Y%m%d")
+
+        try:
+            url = "https://www.twse.com.tw/fund/T86"
+            params = {"response": "json", "date": date_str, "selectType": "ALLBUT0999"}
+            resp = httpx.get(url, params=params, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+
+            for row in data.get("data", []):
+                row_code = str(row[0]).strip()
+                if row_code == code:
+                    def _safe_int(v: str) -> int:
+                        return int(str(v).replace(",", "").strip()) if v and v != "--" else 0
+
+                    return {
+                        "foreign_net": _safe_int(row[4]),
+                        "trust_net": _safe_int(row[7]),
+                        "dealer_net": _safe_int(row[10]),
+                        "total_net": _safe_int(row[4]) + _safe_int(row[7]) + _safe_int(row[10]),
+                        "source": "twse_t86",
+                        "date": date_str,
+                    }
+        except Exception:
+            pass
+
+        return {"foreign_net": 0, "trust_net": 0, "dealer_net": 0,
+                "total_net": 0, "source": "unavailable", "date": date_str}
+
+    return _fetch(code, days)
+
+
+def fetch_margin_data(code: str) -> dict[str, Any]:
+    """取得融資融券餘額（快取 30 分鐘）。"""
+    import httpx
+
+    @st.cache_data(ttl=1800)
+    def _fetch(code: str) -> dict:
+        from datetime import date
+        today = date.today()
+        date_str = today.strftime("%Y%m%d")
+
+        try:
+            url = "https://www.twse.com.tw/exchangeReport/MI_MARGN"
+            params = {"response": "json", "date": date_str, "selectType": "ALL"}
+            resp = httpx.get(url, params=params, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+
+            for row in data.get("creditList", []):
+                row_code = str(row[0]).strip()
+                if row_code == code:
+                    def _safe_int(v: str) -> int:
+                        return int(str(v).replace(",", "").strip()) if v and v != "--" else 0
+
+                    return {
+                        "margin_balance": _safe_int(row[6]),
+                        "margin_change": _safe_int(row[5]),
+                        "short_balance": _safe_int(row[12]),
+                        "short_change": _safe_int(row[11]),
+                        "source": "twse_margn",
+                    }
+        except Exception:
+            pass
+
+        return {"margin_balance": 0, "margin_change": 0,
+                "short_balance": 0, "short_change": 0, "source": "unavailable"}
+
+    return _fetch(code)
 
 
 # Top 30 TW stocks for quick reference

@@ -160,15 +160,25 @@ class BacktestEngine(IBacktestEngine):
         for i in range(num_windows):
             w_start = start_date + timedelta(days=i * window_size)
             w_end = w_start + timedelta(days=window_size)
+            if w_end > end_date:
+                w_end = end_date
             split_point = w_start + timedelta(days=int(window_size * in_sample_ratio))
 
-            # In-sample
-            is_result = await self.run(
-                strategy_name, codes, market, w_start, split_point,
-                params=param_grid if param_grid else None,
-            )
+            # In-sample: param_scan to find best params, or single run
+            if param_grid and len(param_grid) > 0:
+                scan_results = await self.param_scan(
+                    strategy_name, codes, market, w_start, split_point,
+                    param_grid=param_grid, metric="sharpe_ratio",
+                )
+                is_result = scan_results[0] if scan_results else await self.run(
+                    strategy_name, codes, market, w_start, split_point,
+                )
+            else:
+                is_result = await self.run(
+                    strategy_name, codes, market, w_start, split_point,
+                )
 
-            # Out-of-sample
+            # Out-of-sample: use best params from in-sample
             os_result = await self.run(
                 strategy_name, codes, market, split_point, w_end,
                 params=is_result.params,

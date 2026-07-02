@@ -36,12 +36,78 @@ class IPOModule(IIPOModule):
     async def scan_upcoming(self) -> list[dict[str, Any]]:
         """掃描即將公開申購的標的。
 
-        目前使用模擬資料，實際接入需串接證交所公開申購 API。
+        資料源：公開資訊觀測站 (MOPS) — 公開申購公告。
+        Fallback：回傳空列表。
         """
-        # TODO: 串接 TWSE 公開申購 API
-        # 目前回傳空列表，待資料源接入
-        logger.info("IPO scan: no live data source configured, returning empty")
+        import asyncio
+
+        try:
+            result = await asyncio.to_thread(self._fetch_upcoming_sync)
+            if result:
+                logger.info("IPO scan: found %d upcoming IPOs", len(result))
+                return result
+        except Exception as exc:
+            logger.warning("IPO scan failed: %s", exc)
+
         return []
+
+    @staticmethod
+    def _fetch_upcoming_sync() -> list[dict[str, Any]]:
+        """同步抓取公開申購資料（MOPS + TWSE 新上市櫃）。"""
+        import httpx
+        import re
+
+        results: list[dict[str, Any]] = []
+
+        try:
+            # TWSE 最近上市審議通過 (isin list)
+            url = "https://www.twse.com.tw/company/newlisting"
+            resp = httpx.get(url, params={"response": "json"}, timeout=15,
+                           headers={"User-Agent": "Mozilla/5.0"})
+            if resp.status_code == 200:
+                data = resp.json()
+                for row in data.get("data", [])[:10]:
+                    try:
+                        code = str(row[0]).strip()
+                        name = str(row[1]).strip()
+                        listing_date_str = str(row[2]).strip()
+                        results.append({
+                            "code": code,
+                            "name": name,
+                            "listing_date": listing_date_str,
+                            "subscription_price": 0,
+                            "market_ref_price": 0,
+                            "spread_pct": 0.0,
+                            "recommendation": "需查詢承銷價",
+                            "source": "twse_newlisting",
+                        })
+                    except (IndexError, ValueError):
+                        continue
+        except Exception as exc:
+            logger.debug("TWSE newlisting fetch failed: %s", exc)
+
+        # TPEx 新上櫃
+        try:
+            url = "https://www.tpex.org.tw/web/regular_emerging/apply/latest/latest_result.php"
+            resp = httpx.get(url, params={"l": "zh-tw"}, timeout=15,
+                           headers={"User-Agent": "Mozilla/5.0"})
+            if resp.status_code == 200 and "application/json" in resp.headers.get("content-type", ""):
+                data = resp.json()
+                for item in data.get("reportList", [])[:5]:
+                    results.append({
+                        "code": str(item.get("SecuritiesCompanyCode", "")),
+                        "name": str(item.get("CompanyName", "")),
+                        "listing_date": str(item.get("ListingDate", "")),
+                        "subscription_price": 0,
+                        "market_ref_price": 0,
+                        "spread_pct": 0.0,
+                        "recommendation": "需查詢承銷價",
+                        "source": "tpex",
+                    })
+        except Exception as exc:
+            logger.debug("TPEx listing fetch failed: %s", exc)
+
+        return results
 
     async def track_honeymoon(
         self, code: str, ipo_date: date
