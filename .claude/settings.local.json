@@ -25,7 +25,9 @@
       "Bash(PYTHONPATH=. python scripts/train_model.py)",
       "Bash(PYTHONPATH=. python scripts/verify_e2e.py 2>&1)",
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_i18n.py -x -q --tb=short 2>&1)",
-      "Bash(PYTHONPATH=. python -m pytest tests/unit/test_rate_limiter.py tests/unit/test_auth.py -x -q --tb=short 2>&1)"
+      "Bash(PYTHONPATH=. python -m pytest tests/unit/test_rate_limiter.py tests/unit/test_auth.py -x -q --tb=short 2>&1)",
+      "Bash(where cloudflared:*)",
+      "Bash(winget search:*)"
     ]
   }
 }
