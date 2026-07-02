@@ -565,7 +565,10 @@ class QuoteAdapter(IQuoteAdapter):
         logger.info("QuoteAdapter disconnected all sources")
 
     async def get_quote(self, code: str, market: MarketType) -> StockQuote:
-        """嘗試 Fallback Chain 中每個來源，成功則回寫快取。"""
+        """嘗試 Fallback Chain 中每個來源，成功則回寫快取。
+
+        若所有即時來源皆失敗，嘗試用 yfinance 取最近收盤價作為 fallback。
+        """
         chain = self._get_chain(market)
         errors: list[str] = []
 
@@ -583,8 +586,52 @@ class QuoteAdapter(IQuoteAdapter):
                 self._source_health[src.name] = DataSourceHealth.UNHEALTHY
                 logger.warning("Source %s failed for %s: %s", src.name, code, exc)
 
+        # 最後手段：從 yfinance 取最近一筆收盤價
+        try:
+            quote = await self._fallback_last_close(code, market)
+            if quote:
+                logger.info("Fallback to last close for %s: %s", code, quote.price)
+                return quote
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"last_close_fallback: {exc}")
+
         raise QuoteUnavailableError(
             f"All sources failed for {code} ({market.value}): {'; '.join(errors)}"
+        )
+
+    async def _fallback_last_close(
+        self, code: str, market: MarketType
+    ) -> StockQuote | None:
+        """用 yfinance 取最近一筆收盤價作為非交易時段報價。"""
+        import yfinance as yf
+
+        suffix = ".TW" if market == MarketType.TW else ""
+        ticker_code = f"{code}{suffix}"
+        ticker = yf.Ticker(ticker_code)
+        df = await asyncio.to_thread(ticker.history, period="5d")
+        if df is None or df.empty:
+            return None
+        last = df.iloc[-1]
+        close = _safe_decimal(last["Close"])
+        prev_close = _safe_decimal(df.iloc[-2]["Close"]) if len(df) >= 2 else close
+        change = close - prev_close
+        change_pct = float(change / prev_close * 100) if prev_close else 0.0
+        return StockQuote(
+            code=code,
+            market=market,
+            price=close,
+            open_price=_safe_decimal(last["Open"]),
+            high=_safe_decimal(last["High"]),
+            low=_safe_decimal(last["Low"]),
+            volume=int(last.get("Volume", 0)),
+            amount=Decimal("0"),
+            bid_price=close,
+            ask_price=close,
+            change=change,
+            change_pct=round(change_pct, 2),
+            timestamp=datetime.now(tz=timezone.utc),
+            source="yfinance_last_close",
+            is_stale=True,
         )
 
     async def get_quotes_batch(

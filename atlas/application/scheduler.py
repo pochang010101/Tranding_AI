@@ -49,9 +49,11 @@ class Scheduler(ISchedulerService):
         self._execution_log: list[dict[str, Any]] = []
 
     async def start(self) -> None:
-        """啟動排程服務。"""
+        """啟動排程服務。若無排程已註冊，自動載入預設排程。"""
         if self._running:
             return
+        if not self._schedules:
+            await self._load_default_schedules()
         self._running = True
         self._task = asyncio.create_task(self._scheduler_loop())
         logger.info("Scheduler started with %d schedules", len(self._schedules))
@@ -136,14 +138,30 @@ class Scheduler(ISchedulerService):
         # 預設：週一到週五為交易日
         return d.weekday() < 5
 
+    async def _load_default_schedules(self) -> None:
+        """載入預設台股交易日排程（UTC+8 時間）。"""
+        defaults = [
+            # name, cron (M H * * DOW), workflow
+            ("tw_pre_market", "0 8 * * 1-5", "pre_market"),
+            ("tw_intraday", "0 9 * * 1-5", "intraday"),
+            ("tw_post_market", "45 13 * * 1-5", "post_market"),
+            ("tw_monthly_rebuild", "0 20 * * 0", "monthly_rebuild"),
+        ]
+        for name, cron, workflow in defaults:
+            await self.add_schedule(name, cron, workflow)
+        logger.info("Loaded %d default schedules", len(defaults))
+
     # ── 內部排程迴圈 ─────────────────────────────
 
     async def _scheduler_loop(self) -> None:
-        """簡化的排程迴圈：每分鐘檢查一次 cron 匹配。"""
+        """排程迴圈：每分鐘檢查一次 cron 匹配，非交易日跳過。"""
         while self._running:
             now = datetime.utcnow()
+            is_trade_day = await self.is_trading_day(MarketType.TW)
             for entry in self._schedules.values():
                 if not entry.enabled:
+                    continue
+                if not is_trade_day and entry.workflow_name != "monthly_rebuild":
                     continue
                 if self._should_run(entry, now):
                     asyncio.create_task(self._execute_schedule(entry))

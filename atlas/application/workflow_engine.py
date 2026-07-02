@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from atlas.domain.market_regime import MarketRegimeService
     from atlas.domain.sentiment import SentimentService
     from atlas.domain.universe import UniverseManager
+    from atlas.infrastructure.data_manager import DataManager
     from atlas.infrastructure.notification_hub import NotificationHub
     from atlas.strategy.gap_predictor import GapPredictor
 
@@ -48,6 +49,7 @@ class WorkflowEngine(IWorkflowEngine):
         radar: RealtimeRadar | None = None,
         universe: UniverseManager | None = None,
         notification: NotificationHub | None = None,
+        data_manager: DataManager | None = None,
     ) -> None:
         self._market = market
         self._screener = screener
@@ -59,6 +61,7 @@ class WorkflowEngine(IWorkflowEngine):
         self._radar = radar
         self._universe = universe
         self._notification = notification
+        self._data_manager = data_manager
         self._history: list[dict[str, Any]] = []
         self._status: dict[str, dict[str, Any]] = {}
 
@@ -170,7 +173,7 @@ class WorkflowEngine(IWorkflowEngine):
         return {"status": "no_radar_configured"}
 
     async def _run_post_market(self) -> dict[str, Any]:
-        """盤後 SOP：停止雷達 → 選股 → 結論。"""
+        """盤後 SOP：停止雷達 → 資料更新 → 選股 → 結論。"""
         result: dict[str, Any] = {"steps": []}
 
         if self._radar:
@@ -178,6 +181,12 @@ class WorkflowEngine(IWorkflowEngine):
             await self._radar.stop()
             result["intraday_summary"] = summary
             result["steps"].append("radar_stopped")
+
+        # 資料自動更新：日K + 法人買賣超 + 融資融券
+        if self._data_manager:
+            data_result = await self._update_daily_data()
+            result["data_update"] = data_result
+            result["steps"].append("data_update")
 
         if self._screener:
             scan = await self._screener.scan(self._market, top_n=50)
@@ -189,6 +198,38 @@ class WorkflowEngine(IWorkflowEngine):
             result["steps"].append("screener_scan")
 
         return result
+
+    async def _update_daily_data(self) -> dict[str, Any]:
+        """盤後自動拉取並儲存當日資料。"""
+        today = date.today()
+        update_result: dict[str, Any] = {}
+
+        try:
+            # 全市場日K
+            bars = await self._data_manager.fetch_daily_all(self._market, today)
+            update_result["daily_bars"] = len(bars)
+        except Exception as exc:
+            logger.warning("Daily bars update failed: %s", exc)
+            update_result["daily_bars_error"] = str(exc)
+
+        try:
+            # 法人買賣超
+            flow_df = await self._data_manager.fetch_institutional_flow(today, today)
+            update_result["institutional_flow_rows"] = len(flow_df) if flow_df is not None else 0
+        except Exception as exc:
+            logger.warning("Institutional flow update failed: %s", exc)
+            update_result["institutional_flow_error"] = str(exc)
+
+        try:
+            # 融資融券
+            margin_df = await self._data_manager.fetch_margin_trading(today, today)
+            update_result["margin_trading_rows"] = len(margin_df) if margin_df is not None else 0
+        except Exception as exc:
+            logger.warning("Margin trading update failed: %s", exc)
+            update_result["margin_trading_error"] = str(exc)
+
+        logger.info("Daily data update: %s", update_result)
+        return update_result
 
     async def _run_ipo_scan(self) -> dict[str, Any]:
         return {"status": "placeholder", "message": "IPO scan via IPOModule"}
