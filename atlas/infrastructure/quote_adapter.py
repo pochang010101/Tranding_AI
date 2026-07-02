@@ -20,6 +20,7 @@ from typing import Any, Callable
 
 import httpx
 
+from atlas.constants import OTC_CODES, is_otc as _is_otc  # noqa: F401
 from atlas.config import QuoteSourceConfig
 from atlas.enums import DataSourceHealth, MarketType
 from atlas.exceptions import DataSourceError, QuoteUnavailableError
@@ -27,16 +28,6 @@ from atlas.interfaces.infrastructure import ICacheService, IQuoteAdapter
 from atlas.models.market_data import StockQuote
 
 logger = logging.getLogger(__name__)
-
-# 已知上櫃(OTC)股票代碼集合；TSE 查無資料時也可動態發現
-_KNOWN_OTC_CODES: frozenset[str] = frozenset({
-    "5269", "6488", "6669", "3293", "8069", "6147", "3529", "6770", "8454", "5871",
-})
-
-
-def _is_otc(code: str) -> bool:
-    """判斷是否為上櫃股票（OTC）。"""
-    return code in _KNOWN_OTC_CODES
 
 
 # TWSE MIS API 單次批次上限

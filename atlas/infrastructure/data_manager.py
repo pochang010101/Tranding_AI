@@ -13,6 +13,7 @@ import httpx
 import pandas as pd
 import yfinance as yf
 
+from atlas.constants import OTC_CODES, is_otc as _is_otc  # noqa: F401 (re-exported for _tw_code_to_yf)
 from atlas.enums import MarketType
 from atlas.exceptions import (
     AllSourcesExhaustedError,
@@ -41,16 +42,6 @@ _CACHE_TTL_DAILY = 3600  # 1 小時
 _CACHE_TTL_ALL = 1800  # 30 分鐘
 _HTTP_TIMEOUT = 30.0
 
-
-# 已知上櫃(OTC)股票代碼集合；TSE 查無資料時也可動態發現
-_KNOWN_OTC_CODES: frozenset[str] = frozenset({
-    "5269", "6488", "6669", "3293", "8069", "6147", "3529", "6770", "8454", "5871",
-})
-
-
-def _is_otc(code: str) -> bool:
-    """判斷是否為上櫃股票（OTC）。"""
-    return code in _KNOWN_OTC_CODES
 
 
 def _tw_code_to_yf(code: str) -> str:

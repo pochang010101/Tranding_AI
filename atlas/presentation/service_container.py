@@ -11,17 +11,9 @@ from typing import Any
 
 import streamlit as st
 
+from atlas.constants import OTC_CODES, is_otc as _is_otc  # noqa: F401
+
 logger = logging.getLogger(__name__)
-
-# 已知上櫃(OTC)股票代碼集合
-_OTC_PREFIXES: frozenset[str] = frozenset({
-    "5269", "6488", "6669", "3293", "8069", "6147", "3529", "6770", "8454", "5871",
-})
-
-
-def _is_otc(code: str) -> bool:
-    """判斷是否為上櫃股票（OTC）。"""
-    return code in _OTC_PREFIXES
 
 
 @st.cache_resource

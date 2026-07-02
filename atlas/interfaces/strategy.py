@@ -359,16 +359,55 @@ class IMLEngine(ABC):
     """RandomForest ML 預測引擎（FR-SEL-04, MasterTalks）。
 
     內建防未來函數機制：僅使用 T-1 資料預測 T 日方向。
+
+    提供兩組 API：
+    - Sync standalone：train(df) / predict(df)，不依賴 DataManager
+    - Async market-level：train_async(...) / predict_async(...) / predict_batch(...)
     """
 
+    # ── Sync standalone API ──────────────────────────────────────────────
+
     @abstractmethod
-    async def predict(
+    def train(
+        self,
+        df: pd.DataFrame,
+        target_col: str = "future_return",
+    ) -> dict[str, Any]:
+        """以 OHLCV DataFrame 訓練 standalone RandomForest 模型。
+
+        Args:
+            df: 至少含 60 列的 OHLCV DataFrame
+            target_col: 保留參數，目標欄位由內部計算（5 日前向報酬二元標籤）
+
+        Returns:
+            {'accuracy': float, 'precision': float, 'recall': float,
+             'f1': float, 'n_samples': int, 'feature_importance': dict}
+        """
+
+    @abstractmethod
+    def predict(
+        self,
+        df: pd.DataFrame,
+    ) -> pd.Series:
+        """以 standalone 訓練模型對 OHLCV DataFrame 進行預測。
+
+        Args:
+            df: 原始 OHLCV DataFrame
+
+        Returns:
+            pd.Series of int (0/1)，index 與 df 對齊
+        """
+
+    # ── Async market-level API ───────────────────────────────────────────
+
+    @abstractmethod
+    async def predict_async(
         self,
         code: str,
         market: MarketType,
         features_df: pd.DataFrame,
     ) -> dict[str, Any]:
-        """預測單檔 T+1 方向。
+        """預測單檔 T+1 方向（async，使用 market-level model）。
 
         Args:
             code: 股票代碼
@@ -392,13 +431,13 @@ class IMLEngine(ABC):
         """批次預測。"""
 
     @abstractmethod
-    async def train(
+    async def train_async(
         self,
         market: MarketType,
         train_end_date: date,
         lookback_days: int = 500,
     ) -> dict[str, Any]:
-        """訓練/重訓模型。
+        """訓練/重訓 market-level 模型。
 
         Returns:
             {'accuracy': float, 'f1': float, 'feature_importance': {...}}
