@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /install /usr/local
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 COPY --chown=atlas:atlas . .
 COPY --chown=atlas:atlas docker/entrypoint.sh /entrypoint.sh
