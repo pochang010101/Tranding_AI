@@ -48,6 +48,7 @@ def main() -> None:
         "scheduler":  "atlas.presentation.pages.p10_scheduler",
         "settings":   "atlas.presentation.pages.p11_settings",
         "kline":      "atlas.presentation.pages.p12_kline",
+        "paper":      "atlas.presentation.pages.p13_paper_trading",
     }
 
     module_path = page_map.get(page, page_map["dashboard"])
