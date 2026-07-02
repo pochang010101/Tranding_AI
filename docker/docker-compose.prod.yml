@@ -29,6 +29,9 @@ services:
     networks:
       - atlas-internal
     # 生產環境不直接對外暴露 Streamlit port，走 nginx
+    volumes:
+      - ../models:/app/models
+      - backups:/backups
     expose:
       - "8501"
     healthcheck:
