@@ -46,6 +46,12 @@ open http://localhost:8501
 - **Notification Push** (Discord/Telegram/LINE with fallback chain)
 - **Paper Trading** with commission/tax model
 - **Walk-Forward Analysis** with parameter optimization
+- **OTC Support** (TPEx stocks alongside TWSE)
+- **Quarterly Financials** fetching and storage
+- **WebSocket Push** real-time price broadcast to browser clients
+- **Authentication** session-based login (username/password)
+- **PWA** installable app with offline manifest
+- **ML Pipeline** RandomForest model training + inference with feature importance
 
 ## Development
 
@@ -53,7 +59,7 @@ open http://localhost:8501
 # Install dependencies
 pip install -e ".[dev]"
 
-# Run tests (164 tests, <1s)
+# Run tests (247 tests, <1s)
 pytest tests/ -v
 
 # Lint
@@ -105,12 +111,17 @@ atlas/
     realtime_radar.py    11 intraday detectors
     paper_trading.py     Simulated trading with commission/tax
     scheduler.py         Cron-based auto scheduler
+    train_model.py       ML model training pipeline + feature importance
   presentation/
     app.py               Streamlit entry point
     service_container.py Shared backend services + caching
+    auth.py              Session-based authentication
+    ws_server.py         WebSocket price broadcast server
+    pwa.py               PWA manifest + service worker injection
     pages/               P-01 to P-13 (13 pages)
     components/          Theme / Sidebar / Charts
-tests/                   164 tests (unit + integration)
+  constants.py           Shared constants (timeouts, limits, labels)
+tests/                   247 tests (unit + integration)
 docker/                  Dockerfile + entrypoint.sh
 alembic/                 DB migrations (27 tables + 12 indexes)
 ```
@@ -142,11 +153,13 @@ Non-trading days automatically skipped (except monthly rebuild).
 | Database | PostgreSQL 17 |
 | Cache | Redis 7 |
 | ML | scikit-learn (RandomForest) |
+| HTTP | httpx (async) |
+| Image | Pillow |
 | ORM | SQLAlchemy 2.0 |
 | Migration | Alembic |
 | Container | Docker + docker-compose |
 | CI | GitHub Actions |
-| Testing | pytest 9.0 (164 tests) |
+| Testing | pytest 9.0 (247 tests) |
 | Data | yfinance + TWSE/TPEx OpenData |
 
 ## Environment Variables
@@ -159,6 +172,25 @@ Key variables:
 - `DISCORD_WEBHOOK_URL` — Discord notification
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` — Telegram notification
 - `LINE_CHANNEL_TOKEN` — LINE notification
+- `ATLAS_USERNAME` — Web UI login username
+- `ATLAS_PASSWORD` — Web UI login password
+- `GRAFANA_ADMIN_PASSWORD` — Grafana dashboard admin password
+
+## Production Deployment
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for full production setup (SSL, reverse proxy, secrets management).
+
+```bash
+# Production stack with monitoring
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+```
+
+## Monitoring
+
+Prometheus + Grafana stack is defined in `docker-compose.monitoring.yml`.
+
+- Grafana: `http://localhost:3000` (default login: admin / `GRAFANA_ADMIN_PASSWORD`)
+- Prometheus: `http://localhost:9090`
 
 ## License
 

@@ -2,25 +2,71 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - run: pip install ruff
-      - run: ruff check atlas/
-      - run: ruff format --check atlas/
+          python-version: "3.14"
+          allow-prereleases: true
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint with ruff
+        run: ruff check atlas/
+
+  syntax-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+          cache: pip
+
+      - name: Syntax check all Python files
+        run: |
+          python -c "
+          import ast, os, sys
+
+          errors = []
+          for root, dirs, files in os.walk('.'):
+              # skip hidden dirs, venv, __pycache__
+              dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ('venv', '__pycache__', 'node_modules', '.tox')]
+              for fname in files:
+                  if not fname.endswith('.py'):
+                      continue
+                  path = os.path.join(root, fname)
+                  try:
+                      with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                          src = f.read()
+                      ast.parse(src, filename=path)
+                  except SyntaxError as e:
+                      errors.append(f'{path}:{e.lineno}: {e.msg}')
+
+          if errors:
+              print('Syntax errors found:')
+              for err in errors:
+                  print(' ', err)
+              sys.exit(1)
+          else:
+              print(f'All Python files passed syntax check.')
+          "
 
   test:
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, syntax-check]
     services:
       postgres:
         image: postgres:17
@@ -54,23 +100,31 @@ jobs:
       ATLAS_DATABASE_URL: postgresql://atlas:test_password@localhost:5432/atlas_test
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
+          allow-prereleases: true
+          cache: pip
+
       - name: Install dependencies
-        run: pip install ".[dev]"
+        run: pip install -e ".[dev]"
+
       - name: Run tests
-        run: pytest tests/ -v --tb=short --cov=atlas --cov-report=term-missing
+        run: PYTHONPATH=. pytest tests/ -q --tb=short
+
       - name: Run Alembic migrations
         run: python -m alembic upgrade head
 
   docker:
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     steps:
       - uses: actions/checkout@v4
+
       - name: Build Docker image
         run: docker build -f docker/Dockerfile -t atlas-trading:latest .
+
       - name: Verify image
         run: docker run --rm atlas-trading:latest python -c "import atlas; print('Atlas import OK')"
