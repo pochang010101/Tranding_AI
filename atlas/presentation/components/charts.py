@@ -195,7 +195,9 @@ def gauge_chart(
     gauge_steps = []
     prev = min_val
     for threshold, color in steps:
-        gauge_steps.append(dict(range=[prev, threshold], color=color + "33"))
+        # Convert hex to rgba with 0.2 opacity (Plotly doesn't support 8-digit hex)
+        r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+        gauge_steps.append(dict(range=[prev, threshold], color=f"rgba({r},{g},{b},0.2)"))
         prev = threshold
 
     fig = go.Figure(go.Indicator(
