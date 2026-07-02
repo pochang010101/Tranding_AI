@@ -11,6 +11,12 @@ from plotly.subplots import make_subplots
 from atlas.presentation.components.theme import get_colors
 
 
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """Convert #RRGGBB to rgba() string (Plotly doesn't support 8-digit hex)."""
+    r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
 def _apply_layout(fig: go.Figure, title: str = "", height: int = 500) -> go.Figure:
     """統一圖表佈局。"""
     c = get_colors()
@@ -195,9 +201,7 @@ def gauge_chart(
     gauge_steps = []
     prev = min_val
     for threshold, color in steps:
-        # Convert hex to rgba with 0.2 opacity (Plotly doesn't support 8-digit hex)
-        r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
-        gauge_steps.append(dict(range=[prev, threshold], color=f"rgba({r},{g},{b},0.2)"))
+        gauge_steps.append(dict(range=[prev, threshold], color=_hex_to_rgba(color, 0.2)))
         prev = threshold
 
     fig = go.Figure(go.Indicator(
@@ -259,13 +263,13 @@ def equity_curve(
     fig.add_trace(go.Scatter(
         y=eq, mode="lines", name="淨值",
         line=dict(color=c["accent"], width=2),
-        fill="tozeroy", fillcolor=c["accent"] + "15",
+        fill="tozeroy", fillcolor=_hex_to_rgba(c["accent"], 0.08),
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(
         y=-dd, mode="lines", name="回撤%",
         line=dict(color=c["negative"], width=1),
-        fill="tozeroy", fillcolor=c["negative"] + "20",
+        fill="tozeroy", fillcolor=_hex_to_rgba(c["negative"], 0.13),
     ), row=2, col=1)
 
     return _apply_layout(fig, title, height)
