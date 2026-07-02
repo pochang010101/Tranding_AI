@@ -40,7 +40,7 @@ def _render_realtime_quotes() -> None:
     if quote_data["代碼"]:
         source = "realtime" if svc.get_latest(top_codes[0]) else "cache"
         st.caption(f"資料來源：{source} | 自動更新每 30 秒")
-        st.dataframe(quote_data, use_container_width=True, hide_index=True)
+        st.dataframe(quote_data, width="stretch", hide_index=True)
     else:
         st.info("報價載入中...")
 
@@ -111,7 +111,7 @@ def render() -> None:
     with col_a:
         st.subheader("情緒指數")
         fig = gauge_chart(sentiment_val, title="Fear & Greed", min_val=0, max_val=100)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_b:
         st.subheader("權值股即時報價")
@@ -167,7 +167,7 @@ def render() -> None:
                 continue
         if rsi_labels:
             fig = bar_chart(rsi_labels, rsi_values, title="RSI14", height=350)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
     with col_c2:
         st.subheader("排程狀態")
@@ -176,7 +176,7 @@ def render() -> None:
             "Cron": ["0 8 * * 1-5", "0 9 * * 1-5", "45 13 * * 1-5", "0 20 * * 0"],
             "狀態": ["⏳ 排程中", "⏳ 排程中", "⏳ 排程中", "⏳ 排程中"],
         }
-        st.dataframe(schedules, use_container_width=True, hide_index=True)
+        st.dataframe(schedules, width="stretch", hide_index=True)
 
     # Footer
     st.divider()

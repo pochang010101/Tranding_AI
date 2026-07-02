@@ -50,7 +50,7 @@ def render() -> None:
     with col2:
         timeframe = st.selectbox("時間週期", ["日K", "週K", "月K"])
     with col3:
-        load = st.button("📊 載入", type="primary", use_container_width=True)
+        load = st.button("📊 載入", type="primary", width="stretch")
 
     # ── 指標選擇 ─────────────────────────────────
     st.divider()
@@ -184,7 +184,7 @@ def render() -> None:
                 col=1,
             )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ── 副圖指標 ─────────────────────────────────
     if sub_ind:
@@ -306,7 +306,7 @@ def render() -> None:
             margin=dict(l=50, r=30, t=10, b=30),
             showlegend=True,
         )
-        st.plotly_chart(fig_sub, use_container_width=True)
+        st.plotly_chart(fig_sub, width="stretch")
 
     # ── 個股資訊卡 ───────────────────────────────
     st.divider()

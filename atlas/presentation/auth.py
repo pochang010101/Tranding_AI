@@ -103,7 +103,7 @@ def check_password() -> bool:
     with st.form("login_form"):
         username = st.text_input("使用者名稱")
         password = st.text_input("密碼", type="password")
-        submitted = st.form_submit_button("登入", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("登入", type="primary", width="stretch")
 
     if submitted:
         user_ok = _constant_eq(username, valid_username)

@@ -59,7 +59,7 @@ def render() -> None:
             continue
 
     if stock_data["代碼"]:
-        st.dataframe(stock_data, use_container_width=True, hide_index=True,
+        st.dataframe(stock_data, width="stretch", hide_index=True,
                      column_config={"漲跌%": st.column_config.NumberColumn(format="%+.1f%%")})
 
     # ── 台股指數 + 大盤環境 ──────────────────────
@@ -97,7 +97,7 @@ def render() -> None:
             ]
             fig = bar_chart(factors, [round(v, 2) for v in factor_chgs],
                            title="各因子漲跌幅 %", color_by_value=True, height=300)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         except Exception:
             st.info("因子資料載入中...")
 
@@ -128,4 +128,4 @@ def render() -> None:
             rsi = int(rsi) if rsi == rsi else 50
             st.subheader("市場情緒")
             fig = gauge_chart(rsi, title="RSI 情緒指數", height=250)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")

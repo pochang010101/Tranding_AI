@@ -86,7 +86,7 @@ def render() -> None:
         st.subheader("推播測試")
         test_channel = st.selectbox("測試通道", ["Discord", "LINE", "Telegram"])
         test_msg = st.text_input("測試訊息", value="Atlas v5.0 通知測試")
-        if st.button("📤 發送測試訊息", type="primary", use_container_width=True):
+        if st.button("📤 發送測試訊息", type="primary", width="stretch"):
             st.info(f"正在發送至 {test_channel}...")
             try:
                 if test_channel == "Discord" and discord_ok:
@@ -131,7 +131,7 @@ def render() -> None:
             st.slider("最大回撤警報 %", 5, 30, 15, 5, key="dd_alert")
             st.slider("情緒極端倉位上限 %", 10, 50, 30, 10, key="extreme_cap")
 
-        st.button("💾 儲存風控參數", type="primary", use_container_width=True)
+        st.button("💾 儲存風控參數", type="primary", width="stretch")
 
     # ── 選股參數 ────────────────────────────────
     with tab4:
@@ -156,7 +156,7 @@ def render() -> None:
             st.number_input("Top N 候選", value=50, step=10, key="top_n")
             st.selectbox("最低結論等級", ["Lv5", "Lv4", "Lv3", "Lv2", "Lv1"], index=2, key="min_lv")
 
-        st.button("💾 儲存選股參數", type="primary", use_container_width=True)
+        st.button("💾 儲存選股參數", type="primary", width="stretch")
 
     # ── 系統資訊 ────────────────────────────────
     with tab5:
@@ -192,7 +192,7 @@ def render() -> None:
 
         st.divider()
         st.subheader("健康檢查")
-        if st.button("🔍 執行健康檢查", use_container_width=True):
+        if st.button("🔍 執行健康檢查", width="stretch"):
             components_result = []
 
             # Check yfinance
@@ -232,4 +232,4 @@ def render() -> None:
                 "組件": [c[0] for c in components_result],
                 "狀態": [c[1] for c in components_result],
             }
-            st.dataframe(comp_df, use_container_width=True, hide_index=True)
+            st.dataframe(comp_df, width="stretch", hide_index=True)

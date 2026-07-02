@@ -27,7 +27,11 @@
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_i18n.py -x -q --tb=short 2>&1)",
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_rate_limiter.py tests/unit/test_auth.py -x -q --tb=short 2>&1)",
       "Bash(where cloudflared:*)",
-      "Bash(winget search:*)"
+      "Bash(winget search:*)",
+      "Bash(find atlas:*)",
+      "Bash(while read:*)",
+      "Bash(do sed:*)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

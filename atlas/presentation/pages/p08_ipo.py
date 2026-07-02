@@ -75,7 +75,7 @@ def render() -> None:
         df_candidates = pd.DataFrame(rows)
         st.dataframe(
             df_candidates,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "價差%": st.column_config.NumberColumn(format="+%.1f%%"),
@@ -156,7 +156,7 @@ def render() -> None:
         hm_df = pd.DataFrame(hm_rows)
         st.dataframe(
             hm_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "報酬%": st.column_config.NumberColumn(format="%+.1f%%"),
@@ -226,4 +226,4 @@ def render() -> None:
             avg_by_month = [sum(monthly[m]) / len(monthly[m]) for m in months]
             if months:
                 fig = bar_chart(months, avg_by_month, title="月平均報酬%", color_by_value=True, height=350)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")

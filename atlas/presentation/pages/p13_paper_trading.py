@@ -40,14 +40,14 @@ def render() -> None:
         st.write("")
         st.write("")
         if not st.session_state["pt_started"]:
-            if st.button("🟢 啟動紙上交易", type="primary", use_container_width=True):
+            if st.button("🟢 啟動紙上交易", type="primary", width="stretch"):
                 st.session_state["pt_started"] = True
                 st.session_state["pt_capital"] = capital
                 st.session_state["pt_equity_curve"] = [capital]
                 st.toast("紙上交易已啟動！")
                 st.rerun()
         else:
-            if st.button("🔴 停止交易", type="secondary", use_container_width=True):
+            if st.button("🔴 停止交易", type="secondary", width="stretch"):
                 st.session_state["pt_started"] = False
                 st.toast("紙上交易已停止")
                 st.rerun()
@@ -108,7 +108,7 @@ def render() -> None:
             with bc6:
                 buy_reason = st.text_input("買入原因", key="pt_buy_reason", placeholder="策略訊號/突破")
 
-            if st.button("確認買入", type="primary", key="pt_confirm_buy", use_container_width=True):
+            if st.button("確認買入", type="primary", key="pt_confirm_buy", width="stretch"):
                 if buy_code and buy_price > 0 and buy_stop > 0:
                     order = {
                         "代碼": buy_code,
@@ -149,7 +149,7 @@ def render() -> None:
                     sell_reason = st.text_input("賣出原因", key="pt_sell_reason",
                                               placeholder="停損/停利/訊號")
                 if st.button("確認賣出", type="primary", key="pt_confirm_sell",
-                            use_container_width=True):
+                            width="stretch"):
                     if sell_price > 0:
                         pos = st.session_state["pt_positions"][sel_idx]
                         pnl = (sell_price - pos["進場價"]) * pos["張數"] * 1000
@@ -177,7 +177,7 @@ def render() -> None:
     st.subheader("目前持倉")
     if st.session_state["pt_positions"]:
         pos_df = pd.DataFrame(st.session_state["pt_positions"])
-        st.dataframe(pos_df, use_container_width=True, hide_index=True)
+        st.dataframe(pos_df, width="stretch", hide_index=True)
     else:
         st.info("目前無持倉")
 
@@ -186,7 +186,7 @@ def render() -> None:
     st.subheader("交易紀錄")
     if st.session_state["pt_orders"]:
         orders_df = pd.DataFrame(st.session_state["pt_orders"])
-        st.dataframe(orders_df, use_container_width=True, hide_index=True)
+        st.dataframe(orders_df, width="stretch", hide_index=True)
     else:
         st.info("尚無交易紀錄")
 
@@ -195,7 +195,7 @@ def render() -> None:
         st.divider()
         st.subheader("權益曲線")
         fig = equity_curve(st.session_state["pt_equity_curve"], height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     # ── 交易統計 ────────────────────────────────
     sell_orders = [o for o in st.session_state["pt_orders"] if o.get("方向") == "賣出"]
@@ -235,4 +235,4 @@ def render() -> None:
             color_by_value=True,
             height=300,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")

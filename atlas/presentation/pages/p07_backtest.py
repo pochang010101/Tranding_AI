@@ -291,7 +291,7 @@ def render() -> None:
             market = st.session_state.get("market", "TW")
             st.text(f"市場：{market}")
         with col6:
-            run_clicked = st.button("執行回測", type="primary", use_container_width=True)
+            run_clicked = st.button("執行回測", type="primary", width="stretch")
 
     if run_clicked:
         with st.spinner("執行回測中..."):
@@ -348,7 +348,7 @@ def render() -> None:
     eq_curve = metrics.get("equity_curve", [])
     if eq_curve:
         fig = equity_curve(eq_curve, title="淨值曲線 + 回撤", height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     # ── 交易明細 + R 倍數 + 蒙地卡羅 ──────────
     st.divider()
@@ -361,7 +361,7 @@ def render() -> None:
             trades_df = pd.DataFrame(trades)
             st.dataframe(
                 trades_df,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config={
                     "損益%": st.column_config.NumberColumn(format="%.2f%%"),
@@ -378,7 +378,7 @@ def render() -> None:
             r_values = [p / avg_loss_amt for p in pnls]
 
             fig = histogram(r_values, title="R 倍數分佈", x_label="R 倍數", bins=25, height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             col_r1, col_r2, col_r3 = st.columns(3)
             with col_r1:
@@ -404,7 +404,7 @@ def _render_monte_carlo(trades: list[dict], capital: float) -> None:
 
     with mc_col1:
         mc_paths = st.slider("模擬路徑數", 100, 5000, 1000, 100, key="mc_paths")
-        mc_run = st.button("執行模擬", use_container_width=True, key="mc_run")
+        mc_run = st.button("執行模擬", width="stretch", key="mc_run")
 
     if mc_run:
         if not trades:
@@ -439,7 +439,7 @@ def _render_monte_carlo(trades: list[dict], capital: float) -> None:
                 bins=40,
                 height=400,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("請按「執行模擬」開始蒙地卡羅分析。")
 
@@ -464,5 +464,5 @@ def _render_param_scan() -> None:
             st.text_input("MA 快線", value="5, 8, 13")
         with ps_col2:
             st.text_input("MA 慢線", value="21, 34, 55")
-        st.button("開始掃描", use_container_width=True)
+        st.button("開始掃描", width="stretch")
         st.caption("參數掃描功能開發中。")

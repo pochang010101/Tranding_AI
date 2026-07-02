@@ -51,7 +51,7 @@ def render_sidebar() -> str:
             if st.button(
                 f"{icon}  {label}",
                 key=f"nav_{key}",
-                use_container_width=True,
+                width="stretch",
                 type="primary" if current == key else "secondary",
             ):
                 st.session_state["page"] = key
@@ -76,7 +76,7 @@ def render_sidebar() -> str:
         # 主題切換
         theme_label = "🌙 深色" if st.session_state.get("theme", "dark") == "dark" else "☀️ 亮色"
         if st.button(f"切換至 {'☀️ 亮色' if theme_label.startswith('🌙') else '🌙 深色'}",
-                      use_container_width=True):
+                      width="stretch"):
             toggle_theme()
             st.rerun()
 

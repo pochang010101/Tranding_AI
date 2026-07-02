@@ -146,7 +146,7 @@ def render() -> None:
     layers = ["全市場", "L1 流動性", "L2 技術面", "L3 策略適性", "L4 排除"]
     passed = [l0, l1, l2, l3, l4]
     fig = bar_chart(layers, passed, title="四層篩選漏斗", height=350)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ── 篩選條件 ────────────────────────────────
     st.divider()
@@ -173,7 +173,7 @@ def render() -> None:
             horizontal=True,
             height=400,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("無產業資料（篩選後無通過股票）")
 
@@ -183,10 +183,10 @@ def render() -> None:
     col_add, col_rm = st.columns(2)
     with col_add:
         add_codes = st.text_input("手動加入（逗號分隔）", placeholder="2330, 2454")  # noqa: F841
-        st.button("➕ 加入", use_container_width=True)
+        st.button("➕ 加入", width="stretch")
     with col_rm:
         rm_codes = st.text_input("手動排除（逗號分隔）", placeholder="1234, 5678")  # noqa: F841
-        st.button("➖ 排除", use_container_width=True)
+        st.button("➖ 排除", width="stretch")
 
     # ── 月度差異 ────────────────────────────────
     st.divider()
@@ -197,7 +197,7 @@ def render() -> None:
         "名稱": ["長聖", "創意", "長榮航", "亞德客-KY", "正新"],
         "原因": ["流動性達標", "技術面轉多", "策略適性通過", "跌破MA55", "量能萎縮"],
     })
-    st.dataframe(diff_df, use_container_width=True, hide_index=True)
+    st.dataframe(diff_df, width="stretch", hide_index=True)
 
     # ── 重建按鈕 ────────────────────────────────
     st.divider()

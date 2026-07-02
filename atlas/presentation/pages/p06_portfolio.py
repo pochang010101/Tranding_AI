@@ -185,7 +185,7 @@ def render() -> None:
             pos_df = _build_positions_df(positions)
         st.dataframe(
             pos_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "損益%": st.column_config.NumberColumn(format="%+.2f%%"),
@@ -211,7 +211,7 @@ def render() -> None:
         with ac4:
             new_lots = st.number_input("張數", key="add_lots", value=1, step=1)
 
-        if st.button("確認建倉", type="primary", use_container_width=True):
+        if st.button("確認建倉", type="primary", width="stretch"):
             if new_code and new_price > 0 and new_stop > 0 and new_lots > 0:
                 pos_list: list[dict] = st.session_state.get("pt_positions", [])
                 pos_list.append({
@@ -241,7 +241,7 @@ def render() -> None:
             with cc3:
                 close_reason = st.text_input("出場原因", key="close_reason", placeholder="停損/停利/訊號")
 
-            if st.button("確認平倉", type="primary", use_container_width=True):
+            if st.button("確認平倉", type="primary", width="stretch"):
                 if close_price > 0 and selected_label:
                     idx = pos_labels.index(selected_label)
                     pos = positions[idx]
@@ -303,7 +303,7 @@ def render() -> None:
 
     if len(equity_curve_data) >= 2:
         fig = equity_curve(equity_curve_data, height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("尚無足夠的淨值歷史紀錄（需至少完成一筆平倉交易後才會顯示曲線）。")
 
@@ -314,7 +314,7 @@ def render() -> None:
     r_values = perf["r_values"]
     if r_values:
         fig = histogram(r_values, title="已平倉 R 倍數", x_label="R", bins=20, height=350)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("尚無已平倉紀錄，R 倍數分佈將在完成第一筆平倉後顯示。")
 
@@ -323,4 +323,4 @@ def render() -> None:
         st.divider()
         st.subheader("已平倉紀錄")
         orders_df = pd.DataFrame(orders)
-        st.dataframe(orders_df, use_container_width=True, hide_index=True)
+        st.dataframe(orders_df, width="stretch", hide_index=True)

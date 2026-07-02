@@ -133,7 +133,7 @@ def render() -> None:
     display_rs = grouped[["排名", "產業", "RS_5d", "RS_20d", "RS_60d", "5日排名", "20日排名", "趨勢"]].copy()
     st.dataframe(
         display_rs,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "RS_5d":  st.column_config.NumberColumn("RS 5日%",  format="%+.2f%%"),
@@ -154,7 +154,7 @@ def render() -> None:
             title="20日相對強度 %",
             horizontal=True, color_by_value=True, height=400,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_b:
         st.subheader("產業輪動偵測")
@@ -168,7 +168,7 @@ def render() -> None:
             rotation_df = rotation_df.sort_values("排名變化", ascending=False).reset_index(drop=True)
             st.dataframe(
                 rotation_df,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config={
                     "排名變化": st.column_config.NumberColumn(format="%+d"),
@@ -187,7 +187,7 @@ def render() -> None:
         title="5日資金流代理（百萬）",
         horizontal=True, color_by_value=True, height=450,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ── 產業集中度 ──────────────────────────────
     st.divider()
@@ -201,7 +201,7 @@ def render() -> None:
     col_c, col_d = st.columns(2)
 
     with col_c:
-        st.dataframe(industry_counts, use_container_width=True, hide_index=True,
+        st.dataframe(industry_counts, width="stretch", hide_index=True,
                      column_config={
                          "佔比%": st.column_config.NumberColumn(format="%.1f%%"),
                      })
@@ -213,7 +213,7 @@ def render() -> None:
             title="產業佔比（%）",
             horizontal=True, height=350,
         )
-        st.plotly_chart(fig_conc, use_container_width=True)
+        st.plotly_chart(fig_conc, width="stretch")
 
     # 集中度警示（超過 20%）
     over_limit = industry_counts[industry_counts["佔比%"] >= 20]

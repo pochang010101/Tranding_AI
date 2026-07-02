@@ -79,7 +79,7 @@ def render() -> None:
         signals_df = pd.DataFrame(rows)
         st.dataframe(
             signals_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "嚴重度": st.column_config.NumberColumn(format="%d ⭐"),
@@ -97,7 +97,7 @@ def render() -> None:
             det_names, det_counts = zip(*det_counter.most_common(10)) if det_counter else ([], [])
             fig = bar_chart(list(det_names), list(det_counts), title="今日觸發次數",
                             horizontal=True, height=350)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("無訊號資料。")
 
@@ -108,7 +108,7 @@ def render() -> None:
             hot_codes, hot_counts = zip(*code_counter.most_common(10)) if code_counter else ([], [])
             fig = bar_chart(list(hot_codes), list(hot_counts), title="觸發次數 by 標的",
                             horizontal=True, height=350)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("無訊號資料。")
 
@@ -158,7 +158,7 @@ def render() -> None:
         positions_df = pd.DataFrame(rows)
         st.dataframe(
             positions_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "損益%": st.column_config.NumberColumn(format="%+.2f%%"),

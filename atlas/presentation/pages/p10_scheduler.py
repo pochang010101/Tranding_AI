@@ -51,7 +51,7 @@ def render() -> None:
             "last_run": "上次執行",
         })
         st.data_editor(
-            sched_df, use_container_width=True, hide_index=True,
+            sched_df, width="stretch", hide_index=True,
             column_config={"啟用": st.column_config.CheckboxColumn()},
             disabled=["名稱", "Cron", "工作流", "上次執行"],
         )
@@ -72,7 +72,7 @@ def render() -> None:
     with col_t2:
         st.write("")
         st.write("")
-        if st.button("▶️ 手動觸發", type="primary", use_container_width=True):
+        if st.button("▶️ 手動觸發", type="primary", width="stretch"):
             with st.spinner(f"執行 {trigger_target}..."):
                 try:
                     result = asyncio.run(wf_engine.run(trigger_target))
@@ -92,7 +92,7 @@ def render() -> None:
 
     if history:
         hist_df = pd.DataFrame(history)
-        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+        st.dataframe(hist_df, width="stretch", hide_index=True)
     else:
         st.info("尚無執行紀錄。觸發工作流後會顯示歷史。")
 
@@ -112,7 +112,7 @@ def render() -> None:
         status_data["狀態"].append(f"{icon} {status.get('status', 'unknown')}")
         status_data["上次執行"].append(status.get("last_run", "—"))
 
-    st.dataframe(status_data, use_container_width=True, hide_index=True)
+    st.dataframe(status_data, width="stretch", hide_index=True)
 
     # ── 新增排程 ────────────────────────────────
     st.divider()
@@ -124,7 +124,7 @@ def render() -> None:
             new_cron = st.text_input("Cron 表達式", placeholder="0 8 * * 1-5")
         with nc3:
             new_wf = st.selectbox("工作流", workflow_options, key="new_wf")
-        if st.button("新增排程", use_container_width=True):
+        if st.button("新增排程", width="stretch"):
             if new_name and new_cron:
                 try:
                     asyncio.run(scheduler.add_schedule(new_name, new_cron, new_wf))

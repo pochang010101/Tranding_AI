@@ -158,7 +158,7 @@ def render() -> None:
     with col3:
         min_level = st.selectbox("最低等級", ["Lv5", "Lv4", "Lv3", "Lv2", "Lv1", "全部"], index=2)
 
-    run_btn = st.button("🔍 執行掃描", type="primary", use_container_width=True)
+    run_btn = st.button("🔍 執行掃描", type="primary", width="stretch")
 
     if run_btn:
         st.session_state["scan_result"] = None  # 清除快取結果，強制重新掃描
@@ -250,7 +250,7 @@ def render() -> None:
 
     st.dataframe(
         display_df[table_cols].head(top_n),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "主軸總分": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f"),
@@ -277,7 +277,7 @@ def render() -> None:
                 title="主軸總分排行",
                 height=350,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("無足夠資料顯示圖表")
 
@@ -292,7 +292,7 @@ def render() -> None:
                 horizontal=True,
                 height=350,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("無產業資料")
 
@@ -320,7 +320,7 @@ def render() -> None:
             xaxis=dict(showgrid=False),
             yaxis=dict(zeroline=True, zerolinecolor="#555"),
         )
-        st.plotly_chart(fig_chg, use_container_width=True)
+        st.plotly_chart(fig_chg, width="stretch")
 
     # ── 匯出按鈕 ────────────────────────────────
     st.divider()
@@ -328,4 +328,4 @@ def render() -> None:
     with col_e2:
         csv = display_df[table_cols].head(top_n).to_csv(index=False).encode("utf-8-sig")
         st.download_button("📥 匯出 CSV", csv, "scan_result.csv", "text/csv",
-                           use_container_width=True)
+                           width="stretch")
