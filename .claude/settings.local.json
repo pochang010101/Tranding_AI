@@ -10,7 +10,8 @@
       "Bash(docker build:*)",
       "Bash(docker info:*)",
       "Bash(curl:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(gh repo:*)"
     ]
   }
 }
