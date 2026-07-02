@@ -16,11 +16,13 @@ if TYPE_CHECKING:
     from atlas.application.screener_engine import ScreenerEngine
     from atlas.domain.international import InternationalMarket
     from atlas.domain.market_regime import MarketRegimeService
+    from atlas.domain.portfolio import PortfolioManager
     from atlas.domain.sentiment import SentimentService
     from atlas.domain.universe import UniverseManager
     from atlas.infrastructure.data_manager import DataManager
     from atlas.infrastructure.notification_hub import NotificationHub
     from atlas.strategy.gap_predictor import GapPredictor
+    from atlas.strategy.ipo_module import IPOModule
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,8 @@ class WorkflowEngine(IWorkflowEngine):
         universe: UniverseManager | None = None,
         notification: NotificationHub | None = None,
         data_manager: DataManager | None = None,
+        ipo_module: IPOModule | None = None,
+        portfolio: PortfolioManager | None = None,
     ) -> None:
         self._market = market
         self._screener = screener
@@ -62,6 +66,8 @@ class WorkflowEngine(IWorkflowEngine):
         self._universe = universe
         self._notification = notification
         self._data_manager = data_manager
+        self._ipo = ipo_module
+        self._portfolio = portfolio
         self._history: list[dict[str, Any]] = []
         self._status: dict[str, dict[str, Any]] = {}
 
@@ -232,10 +238,60 @@ class WorkflowEngine(IWorkflowEngine):
         return update_result
 
     async def _run_ipo_scan(self) -> dict[str, Any]:
-        return {"status": "placeholder", "message": "IPO scan via IPOModule"}
+        """IPO 掃描：公開申購 + 蜜月期追蹤 + 歷史勝率。"""
+        result: dict[str, Any] = {"steps": []}
+
+        if not self._ipo:
+            return {"status": "no_ipo_module"}
+
+        upcoming = await self._ipo.scan_upcoming()
+        result["upcoming"] = upcoming
+        result["upcoming_count"] = len(upcoming)
+        result["steps"].append("scan_upcoming")
+
+        win_rate = await self._ipo.get_historical_win_rate()
+        result["historical_win_rate"] = win_rate
+        result["steps"].append("historical_stats")
+
+        return result
 
     async def _run_weekly_report(self) -> dict[str, Any]:
-        return {"status": "placeholder", "message": "Weekly report generation"}
+        """週報：持倉績效 + 本週訊號摘要 + 環境概況。"""
+        from datetime import timedelta
+
+        result: dict[str, Any] = {"steps": [], "date": date.today().isoformat()}
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
+
+        # 持倉績效
+        if self._portfolio:
+            stats = await self._portfolio.get_performance_stats()
+            positions = await self._portfolio.get_open_positions(self._market)
+            result["performance"] = stats
+            result["open_positions"] = len(positions)
+            result["steps"].append("portfolio_stats")
+
+        # 本週選股歷史
+        history = await self.get_execution_history(
+            workflow_name="post_market",
+            start_date=week_start,
+            end_date=today,
+        )
+        result["post_market_runs"] = len(history)
+        result["steps"].append("weekly_history")
+
+        # 環境概況
+        if self._regime:
+            regime = await self._regime.update(self._market)
+            result["regime"] = {"state": regime.state.value, "strength": regime.trend_strength}
+            result["steps"].append("regime_snapshot")
+
+        if self._sentiment:
+            sentiment = await self._sentiment.calculate(self._market)
+            result["sentiment"] = {"level": sentiment.level.value, "index": sentiment.index_value}
+            result["steps"].append("sentiment_snapshot")
+
+        return result
 
     async def _run_monthly_rebuild(self) -> dict[str, Any]:
         if self._universe:

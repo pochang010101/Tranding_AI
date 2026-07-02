@@ -33,12 +33,13 @@ class TestRunWorkflow:
     @pytest.mark.asyncio
     async def test_ipo_scan(self, wf):
         result = await wf.run("ipo_scan")
-        assert result["status"] == "placeholder"
+        assert result["status"] == "no_ipo_module"
 
     @pytest.mark.asyncio
     async def test_weekly_report(self, wf):
         result = await wf.run("weekly_report")
-        assert result["status"] == "placeholder"
+        assert "steps" in result
+        assert "date" in result
 
     @pytest.mark.asyncio
     async def test_monthly_rebuild_no_universe(self, wf):
