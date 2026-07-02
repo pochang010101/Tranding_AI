@@ -105,7 +105,39 @@ class HealthChecker:
         return comp
 
     async def check_all(self) -> dict[str, ComponentHealth]:
-        """並行檢查所有已註冊組件。"""
+        """並行檢查所有已註冊組件。
+
+        Prometheus 整合建議：
+            若需將健康狀態暴露給 Prometheus，可在此方法呼叫後
+            透過 ``prometheus_client`` 更新 Gauge/Counter：
+
+            .. code-block:: python
+
+                from prometheus_client import Gauge
+
+                _health_gauge = Gauge(
+                    "atlas_component_healthy",
+                    "1 = HEALTHY, 0 = DEGRADED/UNHEALTHY",
+                    labelnames=["component"],
+                )
+                _latency_gauge = Gauge(
+                    "atlas_component_latency_ms",
+                    "Last health-check latency in milliseconds",
+                    labelnames=["component"],
+                )
+
+                results = await checker.check_all()
+                for name, comp in results.items():
+                    _health_gauge.labels(component=name).set(
+                        1 if comp.status == DataSourceHealth.HEALTHY else 0
+                    )
+                    if comp.latency_ms is not None:
+                        _latency_gauge.labels(component=name).set(comp.latency_ms)
+
+            接著在 Streamlit app 啟動時呼叫：
+                ``prometheus_client.start_http_server(port=9091)``
+            並在 ``docker/prometheus.yml`` 的 streamlit job 中指向 port 9091。
+        """
         if not self._check_fns:
             return {}
 
