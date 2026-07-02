@@ -1,0 +1,67 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${ATLAS_APP_PORT:-8501}:8501"
+    env_file:
+      - .env
+    environment:
+      - ATLAS_DB_HOST=db
+      - ATLAS_REDIS_HOST=redis
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - atlas-net
+    restart: unless-stopped
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${ATLAS_DB_NAME:-atlas}
+      POSTGRES_USER: ${ATLAS_DB_USER:-atlas}
+      POSTGRES_PASSWORD: ${ATLAS_DB_PASSWORD:-atlas_dev}
+      TZ: Asia/Taipei
+    ports:
+      - "${ATLAS_DB_PORT_EXPOSE:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - atlas-net
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${ATLAS_REDIS_PORT_EXPOSE:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - atlas-net
+    restart: unless-stopped
+
+networks:
+  atlas-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:

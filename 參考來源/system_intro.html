@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlas Signal Radar — 台股量價訊號分析系統</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d28;
+      --surface2: #242838;
+      --border: #2d3248;
+      --text: #e6e9f0;
+      --text-dim: #9299b0;
+      --accent: #4f8cff;
+      --accent2: #7c5cfc;
+      --red: #ef4444;
+      --green: #22c55e;
+      --gold: #f59e0b;
+      --cyan: #06b6d4;
+      --pink: #ec4899;
+      --radius: 12px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      scroll-behavior: smooth;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 2rem;
+      overflow: hidden;
+      background: radial-gradient(ellipse at 50% 30%, rgba(79,140,255,0.15), transparent 70%),
+                  radial-gradient(ellipse at 80% 70%, rgba(124,92,252,0.1), transparent 60%);
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 30h60M30 0v60' stroke='%23ffffff08' stroke-width='1'/%3E%3C/svg%3E");
+      opacity: 0.5;
+    }
+
+    .hero-badge {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 1rem;
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      font-size: 0.85rem;
+      color: var(--accent);
+      margin-bottom: 1.5rem;
+      background: rgba(79,140,255,0.08);
+    }
+
+    .hero h1 {
+      position: relative;
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      background: linear-gradient(135deg, var(--accent), var(--accent2), var(--pink));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 1rem;
+    }
+
+    .hero p {
+      position: relative;
+      max-width: 680px;
+      font-size: 1.15rem;
+      color: var(--text-dim);
+    }
+
+    .hero-stats {
+      position: relative;
+      display: flex;
+      gap: 2.5rem;
+      margin-top: 2.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .hero-stat {
+      text-align: center;
+    }
+
+    .hero-stat .num {
+      display: block;
+      font-size: 2.4rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-stat .label {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+
+    .scroll-hint {
+      position: absolute;
+      bottom: 2rem;
+      animation: bounce 2s infinite;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(8px); }
+    }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(15,17,23,0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 0.6rem 2rem;
+      display: flex;
+      gap: 1.5rem;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    nav a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 500;
+      padding: 0.3rem 0;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    nav a:hover, nav a:focus {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* ── Sections ── */
+    section {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 4rem 1.5rem;
+    }
+
+    .section-tag {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 2rem 0 0.8rem;
+      color: var(--text);
+    }
+
+    .section-desc {
+      color: var(--text-dim);
+      max-width: 700px;
+      margin-bottom: 2rem;
+    }
+
+    /* ── Cards Grid ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+      gap: 1.2rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      margin-bottom: 1rem;
+    }
+
+    .card h4 {
+      font-size: 1.05rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .card p {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Architecture ── */
+    .arch-flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: stretch;
+      justify-content: center;
+    }
+
+    .arch-box {
+      flex: 1;
+      min-width: 260px;
+      max-width: 340px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      text-align: center;
+      position: relative;
+    }
+
+    .arch-box .tier {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      margin-bottom: 0.8rem;
+    }
+
+    .arch-box:nth-child(1) .tier { background: rgba(79,140,255,0.15); color: var(--accent); }
+    .arch-box:nth-child(2) .tier { background: rgba(124,92,252,0.15); color: var(--accent2); }
+    .arch-box:nth-child(3) .tier { background: rgba(245,158,11,0.15); color: var(--gold); }
+
+    .arch-arrow {
+      display: flex;
+      align-items: center;
+      font-size: 1.5rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Strategy Table ── */
+    .strat-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .strat-table thead {
+      position: sticky;
+      top: 3rem;
+    }
+
+    .strat-table th {
+      background: var(--surface2);
+      color: var(--text-dim);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.7rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .strat-table td {
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .strat-table tr:hover td {
+      background: rgba(79,140,255,0.04);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .tag-o { background: rgba(6,182,212,0.15); color: var(--cyan); }
+    .tag-s { background: rgba(79,140,255,0.15); color: var(--accent); }
+    .tag-k { background: rgba(245,158,11,0.15); color: var(--gold); }
+    .tag-p { background: rgba(236,72,153,0.15); color: var(--pink); }
+    .tag-t { background: rgba(34,197,94,0.15); color: var(--green); }
+    .tag-sd { background: rgba(239,68,68,0.15); color: var(--red); }
+    .tag-buy { background: rgba(239,68,68,0.15); color: #f87171; }
+    .tag-sell { background: rgba(34,197,94,0.15); color: #4ade80; }
+
+    /* ── Signal Grid (Intraday 6) ── */
+    .sig-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1rem;
+    }
+
+    .sig-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.2rem 1.4rem;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .sig-badge {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+
+    .sig-badge.buy { background: rgba(239,68,68,0.12); color: #f87171; }
+    .sig-badge.sell { background: rgba(34,197,94,0.12); color: #4ade80; }
+
+    .sig-card h4 {
+      font-size: 0.95rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .sig-card p {
+      font-size: 0.83rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Module Fusion ── */
+    .module-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+
+    .module-card {
+      background: var(--surface);
+      border-left: 3px solid;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 1.2rem 1.4rem;
+    }
+
+    .module-card:nth-child(1) { border-color: var(--accent); }
+    .module-card:nth-child(2) { border-color: var(--gold); }
+    .module-card:nth-child(3) { border-color: var(--pink); }
+    .module-card:nth-child(4) { border-color: var(--cyan); }
+
+    .module-card .mod-name {
+      font-weight: 700;
+      margin-bottom: 0.3rem;
+    }
+
+    .module-card .mod-school {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-bottom: 0.5rem;
+    }
+
+    .module-card .mod-desc {
+      font-size: 0.88rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Pages List ── */
+    .page-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 0.8rem;
+    }
+
+    .page-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.2rem;
+      transition: border-color 0.2s;
+    }
+
+    .page-item:hover {
+      border-color: var(--accent);
+    }
+
+    .page-num {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 0.9rem;
+    }
+
+    .page-item .page-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .page-item .page-desc {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+    }
+
+    /* ── CLI ── */
+    .cli-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+
+    .cli-header {
+      background: var(--surface2);
+      padding: 0.5rem 1rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .cli-header::before {
+      content: '';
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 16px 0 0 var(--gold), 32px 0 0 var(--green);
+    }
+
+    .cli-body {
+      padding: 1rem 1.2rem;
+      font-family: "Fira Code", "JetBrains Mono", monospace;
+      font-size: 0.85rem;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .cli-body .cmd {
+      color: var(--green);
+    }
+
+    .cli-body .cmt {
+      color: var(--text-dim);
+    }
+
+    /* ── Data Flow ── */
+    .flow-steps {
+      position: relative;
+      padding-left: 2rem;
+    }
+
+    .flow-steps::before {
+      content: '';
+      position: absolute;
+      left: 0.6rem;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--border);
+    }
+
+    .flow-step {
+      position: relative;
+      padding: 0.8rem 0 0.8rem 1.5rem;
+    }
+
+    .flow-step::before {
+      content: '';
+      position: absolute;
+      left: -1.45rem;
+      top: 1.1rem;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--bg);
+    }
+
+    .flow-step h4 {
+      font-size: 0.95rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .flow-step p {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Config Params ── */
+    .param-group {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+
+    .param-group-header {
+      background: var(--surface2);
+      padding: 0.7rem 1.2rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .param-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 1.2rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.88rem;
+    }
+
+    .param-row:last-child {
+      border-bottom: none;
+    }
+
+    .param-name {
+      font-family: "Fira Code", monospace;
+      color: var(--cyan);
+    }
+
+    .param-val {
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    .param-desc {
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      flex: 1;
+      text-align: center;
+    }
+
+    /* ── Tech Stack ── */
+    .stack-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.8rem;
+    }
+
+    .stack-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .stack-item .stack-name {
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .stack-item .stack-use {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 3rem 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    footer strong {
+      color: var(--text);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 2rem; }
+      .hero-stats { gap: 1.5rem; }
+      .arch-arrow { display: none; }
+      nav { padding: 0.5rem 1rem; gap: 1rem; }
+      section { padding: 2.5rem 1rem; }
+    }
+
+    /* ── Divider ── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0;
+    }
+
+    /* ── Scoring ── */
+    .scoring-formula {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      font-family: "Fira Code", monospace;
+      font-size: 0.88rem;
+      line-height: 2;
+      overflow-x: auto;
+    }
+
+    .scoring-formula .op {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .scoring-formula .dim {
+      color: var(--gold);
+    }
+
+    .scoring-formula .val {
+      color: var(--green);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════ HERO ═══════════════════ -->
+<div class="hero">
+  <div class="hero-badge">Atlas Signal Radar v2.0</div>
+  <h1>台股量價訊號<br>分析系統</h1>
+  <p>融合蕭明道量價時角、林教授扣抵共振、廖崧沂飆股思維三大流派，<br>打造 22 個日 K 策略 + 盤中六訊號的完整短線交易研究平台。</p>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <span class="num">22</span>
+      <span class="label">日 K 策略</span>
+    </div>
+    <div class="hero-stat">
+      <span class="num">6</span>
+      <span class="label">盤中即時訊號</span>
+    </div>
+    <div class="hero-stat">
+      <span class="num">4</span>
+      <span class="label">融合模組</span>
+    </div>
+    <div class="hero-stat">
+      <span class="num">9</span>
+      <span class="label">儀表板分頁</span>
+    </div>
+    <div class="hero-stat">
+      <span class="num">20+</span>
+      <span class="label">核心引擎</span>
+    </div>
+  </div>
+  <div class="scroll-hint">&#8595; 向下探索</div>
+</div>
+
+<!-- ═══════════════════ NAV ═══════════════════ -->
+<nav>
+  <a href="#architecture">架構</a>
+  <a href="#strategies">策略體系</a>
+  <a href="#intraday">盤中六訊號</a>
+  <a href="#fusion">融合計分</a>
+  <a href="#dashboard">儀表板</a>
+  <a href="#cli">CLI 指令</a>
+  <a href="#dataflow">資料流</a>
+  <a href="#config">參數配置</a>
+  <a href="#engines">引擎模組</a>
+  <a href="#tech">技術棧</a>
+</nav>
+
+<!-- ═══════════════════ ARCHITECTURE ═══════════════════ -->
+<section id="architecture">
+  <span class="section-tag">Architecture</span>
+  <h2>三層部署架構</h2>
+  <p class="section-desc">Streamlit 前端 + GitHub Actions 自動掃描 + 群益即時報價，三層獨立運作、互為退化備援。</p>
+
+  <div class="arch-flow">
+    <div class="arch-box">
+      <span class="tier">Layer 1 — UI</span>
+      <h4>Streamlit 儀表板</h4>
+      <p style="font-size:0.88rem;color:var(--text-dim)">Streamlit Cloud / 本機部署。9 個分頁涵蓋：市場環境、盤後選股、盤中雷達、K 線檢視、回測優化、績效追蹤。</p>
+    </div>
+    <div class="arch-arrow">&#8594;</div>
+    <div class="arch-box">
+      <span class="tier">Layer 2 — Automation</span>
+      <h4>排程掃描 + 推播</h4>
+      <p style="font-size:0.88rem;color:var(--text-dim)">GitHub Actions 每日盤後 14:00 自動掃描，產出選股報告並 Commit，同步推播 Discord / LINE。</p>
+    </div>
+    <div class="arch-arrow">&#8594;</div>
+    <div class="arch-box">
+      <span class="tier">Layer 3 — Data</span>
+      <h4>即時報價引擎</h4>
+      <p style="font-size:0.88rem;color:var(--text-dim)">群益 Capital SKCOM API（Windows 限定），雲端自動降級至 TWSE MIS 公開報價，永不中斷。</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════ STRATEGIES ═══════════════════ -->
+<section id="strategies">
+  <span class="section-tag">Strategy System</span>
+  <h2>22 個日 K 策略</h2>
+  <p class="section-desc">六大系列覆蓋隔日沖、波段突破、扣抵共振、型態識別、技術指標、空頭做空，全方位多空佈局。</p>
+
+  <!-- O 系列 -->
+  <h3>O 系列 — 隔日沖（T+1 極短線）</h3>
+  <div style="overflow-x:auto">
+    <table class="strat-table">
+      <thead><tr><th>代碼</th><th>策略名稱</th><th>核心邏輯</th><th>停損 / 停利</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-o">O-1</span></td><td>凹洞量後攻擊</td><td>底部縮量形成凹洞 &rarr; 放量漲升啟動</td><td>-1.5% / +3%</td></tr>
+        <tr><td><span class="tag tag-o">O-2</span></td><td>量增突破前高</td><td>量增 &ge;1.5x + 突破 13 日新高</td><td>-1.5% / +3%</td></tr>
+        <tr><td><span class="tag tag-o">O-5</span></td><td>縮量整理末端攻擊</td><td>3 日量縮整理 + 突破近 3 日高點</td><td>-1.5% / +3%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- S 系列 -->
+  <h3>S 系列 — 波段突破（3~10 日）</h3>
+  <div style="overflow-x:auto">
+    <table class="strat-table">
+      <thead><tr><th>代碼</th><th>策略名稱</th><th>核心邏輯</th><th>停損 / 停利</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-s">S-1</span></td><td>三盤突破</td><td>連續 3 日突破前高，多方續攻</td><td>-5% / +10%</td></tr>
+        <tr><td><span class="tag tag-s">S-2</span></td><td>龍回頭</td><td>上升趨勢回檔至均線後再起攻</td><td>-5% / +12%</td></tr>
+        <tr><td><span class="tag tag-s">S-3</span></td><td>飄（量縮創高）</td><td>量縮卻創新高 + 漲幅 &lt;5%，惜售格局</td><td>-5% / +15%</td></tr>
+        <tr><td><span class="tag tag-s">S-4</span></td><td>均量帶動上揚</td><td>5MV 金叉 13MV，量能齊揚確認</td><td>-5% / +10%</td></tr>
+        <tr><td><span class="tag tag-s">S-5</span></td><td>均線金叉扣低</td><td>8MA 金叉 21MA + 扣抵值低</td><td>-5% / +10%</td></tr>
+        <tr><td><span class="tag tag-s">S-6</span></td><td>盤整突破</td><td>區間整理 5 日 &rarr; 2.0x 放量突破</td><td>-5% / +12%</td></tr>
+        <tr><td><span class="tag tag-s">S-7</span></td><td>攻守角度比</td><td>前段陡攻 &rarr; 淺回檔 &rarr; 重新轉強</td><td>-5% / +12%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- K 系列 -->
+  <h3>K 系列 — 扣抵共振（林教授流派）</h3>
+  <div style="overflow-x:auto">
+    <table class="strat-table">
+      <thead><tr><th>代碼</th><th>策略名稱</th><th>核心邏輯</th><th>停損 / 停利</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-k">K-1</span></td><td>三層均線同步扣低</td><td>8MA、21MA、55MA 同時站上前收，三線扣低共振</td><td>-5% / +12%</td></tr>
+        <tr><td><span class="tag tag-k">K-2</span></td><td>三層均量同步扣低</td><td>5MV、13MV、34MV 同時量增，量能三線扣低</td><td>-5% / +15%</td></tr>
+        <tr><td><span class="tag tag-k">K-3</span></td><td>扣抵雙共振（金級）</td><td>K-1 + K-2 同時成立，極低頻率的金級訊號</td><td>-5% / +20%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- P 系列 -->
+  <h3>P 系列 — 型態面</h3>
+  <div style="overflow-x:auto">
+    <table class="strat-table">
+      <thead><tr><th>代碼</th><th>策略名稱</th><th>核心邏輯</th><th>停損 / 停利</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-p">P-1</span></td><td>W 底突破頸線</td><td>兩個相近低點 + 量增突破頸線</td><td>-5% / +12%</td></tr>
+        <tr><td><span class="tag tag-p">P-2</span></td><td>旗型整理突破</td><td>急漲 &rarr; 量縮平台整理 &rarr; 帶量突破</td><td>-5% / +12%</td></tr>
+        <tr><td><span class="tag tag-p">P-3</span></td><td>三角收斂突破</td><td>高點降低 + 低點升高 &rarr; 突破上沿</td><td>-5% / +10%</td></tr>
+        <tr><td><span class="tag tag-p">P-4</span></td><td>布林收斂突破</td><td>布林帶寬 &lt;1%（極度收斂） + 放量突破</td><td>-5% / +12%</td></tr>
+        <tr><td><span class="tag tag-p">P-5</span></td><td>前波高之上突破</td><td>平台位置 &gt; 前波高 + 帶量突破</td><td>-5% / +14%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- T 系列 -->
+  <h3>T 系列 — 技術指標</h3>
+  <div style="overflow-x:auto">
+    <table class="strat-table">
+      <thead><tr><th>代碼</th><th>策略名稱</th><th>核心邏輯</th><th>停損 / 停利</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-t">T-1</span></td><td>季線翻揚轉強</td><td>55MA 由下向上走平 + 價格站穩季線之上</td><td>-5% / +15%</td></tr>
+        <tr><td><span class="tag tag-t">T-2</span></td><td>MACD 紅柱擴張</td><td>MACD &gt; Signal 且柱狀體持續擴大</td><td>-5% / +12%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- SD 系列 -->
+  <h3>SD 系列 — 空頭做空</h3>
+  <div style="overflow-x:auto">
+    <table class="strat-table">
+      <thead><tr><th>代碼</th><th>策略名稱</th><th>核心邏輯</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-sd">SD-1</span></td><td>凹峰量爆量殺</td><td>高檔量爆但價格下跌（供給傾瀉）</td><td>賣出警示</td></tr>
+        <tr><td><span class="tag tag-sd">SD-2</span></td><td>量增價跌空頭</td><td>量增趨勢但價格持續下跌</td><td>空頭確認</td></tr>
+        <tr><td><span class="tag tag-sd">SD-3</span></td><td>三盤跌破續空</td><td>連續 3 日跌破前低</td><td>空方續攻</td></tr>
+        <tr><td><span class="tag tag-sd">SD-4</span></td><td>三層均線扣高</td><td>三層均線同步走低（空頭共振）</td><td>系統性空頭</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════ INTRADAY 6 ═══════════════════ -->
+<section id="intraday">
+  <span class="section-tag">Intraday Signals</span>
+  <h2>盤中六訊號</h2>
+  <p class="section-desc">5 分鐘 K 棒即時觸發，三組多空配對（B1/S1、B2/S2、B3/S3），內建漲跌停互斥與 B2/S2 衝突處理邏輯。</p>
+
+  <h3 style="color:#f87171">買進訊號（多頭）</h3>
+  <div class="sig-grid">
+    <div class="sig-card">
+      <div class="sig-badge buy">B1</div>
+      <div>
+        <h4>突破整理上沿</h4>
+        <p>收盤價突破近 20 根最高價 + 量增 &ge;1.8x 均量。多方啟動，漲停鎖住時不觸發。</p>
+      </div>
+    </div>
+    <div class="sig-card">
+      <div class="sig-badge buy">B2</div>
+      <div>
+        <h4>惜售守住支撐</h4>
+        <p>守住 MA20 支撐 + 量縮 &le;0.5x（惜售）。需當根未下跌（close &ge; prev），與 S2 互斥。</p>
+      </div>
+    </div>
+    <div class="sig-card">
+      <div class="sig-badge buy">B3</div>
+      <div>
+        <h4>洗盤後翻越</h4>
+        <p>跌破 MA20 後強勢收回 + 大量 &ge;1.8x。假跌破真洗盤，多方反撲。</p>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="color:#4ade80;margin-top:1.5rem">賣出訊號（空頭）</h3>
+  <div class="sig-grid">
+    <div class="sig-card">
+      <div class="sig-badge sell">S1</div>
+      <div>
+        <h4>跌破整理下沿</h4>
+        <p>收盤價跌破近 20 根最低價 + 量增 &ge;1.8x。空方啟動，跌停鎖住時不觸發。</p>
+      </div>
+    </div>
+    <div class="sig-card">
+      <div class="sig-badge sell">S2</div>
+      <div>
+        <h4>止漲動能衰竭</h4>
+        <p>量縮 &le;0.5x 不見新高（止漲）。需當根下跌（close &lt; prev），排除漲停鎖住與 MA20 支撐。</p>
+      </div>
+    </div>
+    <div class="sig-card">
+      <div class="sig-badge sell">S3</div>
+      <div>
+        <h4>跌破均線支撐</h4>
+        <p>收盤跌破 MA20 + 量增 &ge;1.8x。均線支撐失守，趨勢反轉確認。</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>互斥規則</h3>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.2rem 1.4rem;font-size:0.9rem;color:var(--text-dim);line-height:2">
+    <strong style="color:var(--text)">B2 / S2 衝突處理</strong> — 守住 MA20 支撐 &rarr; 歸 B2，S2 不觸發<br>
+    <strong style="color:var(--text)">漲停鎖住</strong> — B1 不觸發（掛單排隊非真突破）、S2 不觸發<br>
+    <strong style="color:var(--text)">跌停鎖住</strong> — S1 不觸發<br>
+    <strong style="color:var(--text)">開盤初期</strong> — 需至少 lookback_bars/2 根 K 棒，前幾根不觸發
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════ FUSION ═══════════════════ -->
+<section id="fusion">
+  <span class="section-tag">Multi-dimensional Fusion</span>
+  <h2>四大模組融合計分</h2>
+  <p class="section-desc">將三大流派的策略分門歸類為四大模組，各自評分後加上籌碼、產業、角度等多維加分，形成最終共振評分。</p>
+
+  <div class="module-row">
+    <div class="module-card">
+      <div class="mod-name">Module L — 飆股 DNA</div>
+      <div class="mod-school">蕭明道流派</div>
+      <div class="mod-desc">O-1、O-2、O-5、S-3、S-6<br>量價供需四象限 + 三均線多排，短線買點。</div>
+    </div>
+    <div class="module-card">
+      <div class="mod-name">Module L4 — 觔斗雲助漲</div>
+      <div class="mod-school">林教授流派</div>
+      <div class="mod-desc">K-1、K-2、K-3、S-5<br>費氏三層均線/均量扣抵共振，波段超前指標。</div>
+    </div>
+    <div class="module-card">
+      <div class="mod-name">Module C — 強勢突破集中</div>
+      <div class="mod-school">廖崧沂流派</div>
+      <div class="mod-desc">S-1、S-2、S-4、T-1、T-2<br>RS &ge;80 百分位 + 產業輪動，選最強族群中最強股。</div>
+    </div>
+    <div class="module-card">
+      <div class="mod-name">Module F — 底部布局</div>
+      <div class="mod-school">反向策略</div>
+      <div class="mod-desc">P-1、P-4<br>W 底 / 布林極度收斂，底部磨底期反彈伏兵。</div>
+    </div>
+  </div>
+
+  <h3>綜合評分公式</h3>
+  <div class="scoring-formula">
+    <span class="dim">總分</span> <span class="op">=</span> <span class="dim">模組分</span>（L / L4 / C / F 各策略命中加分）<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="dim">量價後處理</span>（量增價漲 <span class="val">+2</span> &sim; 量縮價跌 <span class="val">-1</span>）<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="dim">扣抵共振</span>（三層 MA 同步扣低 <span class="val">+3</span>、三層 MV 同步扣低 <span class="val">+2</span>）<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="dim">角度企圖</span>（陡峭 <span class="val">+2</span>、緩漲 <span class="val">+1</span>、陡跌 <span class="val">-2</span>）<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="dim">籌碼面</span>（外資/融資強度 <span class="val">+1 ~ +3</span>）<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="dim">產業 RS</span>（相對強度 <span class="val">+1 ~ +3</span>、弱勢 <span class="val">-1</span>）<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="dim">多維共振</span>（2 維 <span class="val">+2</span>、3 維 <span class="val">+4</span>、4 維 <span class="val">+7</span>）<br><br>
+    <span class="dim">方向判定</span>：總分 <span class="val">&ge;4</span> + 至少 1 個日 K 訊號 &rarr; <span style="color:#f87171;font-weight:700">多</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;總分 <span class="val">&le;-4</span> + 至少 1 個空頭訊號 &rarr; <span style="color:#4ade80;font-weight:700">空</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;其餘 &rarr; 中性
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════ DASHBOARD ═══════════════════ -->
+<section id="dashboard">
+  <span class="section-tag">Streamlit Dashboard</span>
+  <h2>9 個儀表板分頁</h2>
+  <p class="section-desc">從大盤環境到個股深度，從盤後掃描到盤中即時雷達，一站式完成量價研究。</p>
+
+  <div class="page-list">
+    <div class="page-item">
+      <div class="page-num">1</div>
+      <div>
+        <div class="page-title">市場環境因子</div>
+        <div class="page-desc">大盤強多/盤整/弱空判讀、VIX、費半、ADR、期現貨價差</div>
+      </div>
+    </div>
+    <div class="page-item">
+      <div class="page-num">2</div>
+      <div>
+        <div class="page-title">RS 強度與產業輪動</div>
+        <div class="page-desc">個股相對強度排名、產業 RS 集中度、輪動趨勢追蹤</div>
+      </div>
+    </div>
+    <div class="page-item">
+      <div class="page-num">3</div>
+      <div>
+        <div class="page-title">盤後選股</div>
+        <div class="page-desc">批次掃描全池 &rarr; 買進候選 / 賣出警示 / 補漲候補三清單</div>
+      </div>
+    </div>
+    <div class="page-item">
+      <div class="page-num">4</div>
+      <div>
+        <div class="page-title">K 線量價檢視</div>
+        <div class="page-desc">互動式 K 線圖 + 均線 + 訊號標記 + 扣抵位置可視化</div>
+      </div>
+    </div>
+    <div class="page-item">
+      <div class="page-num">5</div>
+      <div>
+        <div class="page-title">盤中即時雷達</div>
+        <div class="page-desc">觀察清單即時報價 + B1~B3/S1~S3 六訊號觸發提醒</div>
+      </div>
+    </div>
+    <div class="page-item">
+      <div class="page-num">6</div>
+      <div>
+        <div class="page-title">交易日誌與績效</div>
+        <div class="page-desc">模擬交易紙上帳績效、勝率、Sharpe Ratio、最大回撤</div>
+      </div>
+    </div>
+    <div class="page-item">
+      <div class="page-num">7</div>
+      <div>
+        <div class="page-title">策略熱力圖與深度報告</div>
+        <div class="page-desc">22 個策略全池勝率矩陣、單檔完整深度分析</div>
+      </div>
+    </div>
+    <div class="page-item">
+      <div class="page-num">8</div>
+      <div>
+        <div class="page-title">回測與基因優化</div>
+        <div class="page-desc">參數網格搜尋 / 遺傳演算法（DEAP）自動尋找最優參數組合</div>
+      </div>
+    </div>
+    <div class="page-item">
+      <div class="page-num">9</div>
+      <div>
+        <div class="page-title">策略與參數</div>
+        <div class="page-desc">SignalRadarConfig 全參數即時調整、儲存與載入</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════ CLI ═══════════════════ -->
+<section id="cli">
+  <span class="section-tag">Command Line Interface</span>
+  <h2>CLI 統一指令</h2>
+  <p class="section-desc">透過 atlas_cli.py 一行指令完成所有操作，從日常掃描到深度研究。</p>
+
+  <div class="cli-block">
+    <div class="cli-header">日常掃描</div>
+    <div class="cli-body">
+      <span class="cmd">python atlas_cli.py daily</span>          <span class="cmt"># 盤後訊號掃描（14:30 後執行）</span><br>
+      <span class="cmd">python atlas_cli.py full</span>           <span class="cmt"># 全流程：抓清單 → 建池 → 掃描</span><br>
+      <span class="cmd">python atlas_cli.py live</span>           <span class="cmt"># 盤中即時雷達（09:00~13:30）</span><br>
+      <span class="cmd">python atlas_cli.py live-dry</span>       <span class="cmt"># 盤中試跑（不接群益）</span>
+    </div>
+  </div>
+
+  <div class="cli-block">
+    <div class="cli-header">選股池管理</div>
+    <div class="cli-body">
+      <span class="cmd">python atlas_cli.py fetch</span>          <span class="cmt"># 抓股票清單（TWSE/TPEx ~2,290 檔）</span><br>
+      <span class="cmd">python atlas_cli.py pool</span>           <span class="cmt"># 4 層篩選建構選股池（~96 檔）</span><br>
+      <span class="cmd">python atlas_cli.py catch-up</span>       <span class="cmt"># 補漲候補名單</span><br>
+      <span class="cmd">python atlas_cli.py chips</span>          <span class="cmt"># 三大法人籌碼資料</span><br>
+      <span class="cmd">python atlas_cli.py industry</span>       <span class="cmt"># 產業 RS 排名更新</span><br>
+      <span class="cmd">python atlas_cli.py market</span>         <span class="cmt"># 大盤環境因子</span><br>
+      <span class="cmd">python atlas_cli.py calendar</span>       <span class="cmt"># 除權息 / 財報日</span>
+    </div>
+  </div>
+
+  <div class="cli-block">
+    <div class="cli-header">研究與回測</div>
+    <div class="cli-body">
+      <span class="cmd">python atlas_cli.py stock 2330.TW</span>  <span class="cmt"># 個股深度報告</span><br>
+      <span class="cmd">python atlas_cli.py backtest 2330.TW</span> <span class="cmt"># 22 策略回測</span><br>
+      <span class="cmd">python atlas_cli.py chart 2330.TW</span>  <span class="cmt"># 互動式 K 線圖</span><br>
+      <span class="cmd">python atlas_cli.py pattern 2330.TW</span> <span class="cmt"># W底/旗型/三角 型態識別</span><br>
+      <span class="cmd">python atlas_cli.py heatmap</span>        <span class="cmt"># 策略勝率熱力圖</span><br>
+      <span class="cmd">python atlas_cli.py overview</span>       <span class="cmt"># 綜合儀表板 HTML</span><br>
+      <span class="cmd">python atlas_cli.py backtest 2330.TW --optimize</span> <span class="cmt"># 基因演算法優化</span>
+    </div>
+  </div>
+
+  <div class="cli-block">
+    <div class="cli-header">系統管理</div>
+    <div class="cli-body">
+      <span class="cmd">python atlas_cli.py health</span>         <span class="cmt"># 系統健康檢查</span><br>
+      <span class="cmd">python atlas_cli.py status</span>         <span class="cmt"># 當前狀態總覽</span><br>
+      <span class="cmd">python atlas_cli.py setup</span>          <span class="cmt"># 初始化配置精靈</span><br>
+      <span class="cmd">python atlas_cli.py backup</span>         <span class="cmt"># 備份/還原</span><br>
+      <span class="cmd">python atlas_cli.py schedule-install</span> <span class="cmt"># Windows 排程安裝</span>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════ DATA FLOW ═══════════════════ -->
+<section id="dataflow">
+  <span class="section-tag">Data Pipeline</span>
+  <h2>資料流程</h2>
+
+  <h3>每日盤後掃描流程</h3>
+  <div class="flow-steps">
+    <div class="flow-step">
+      <h4>候選清單取得</h4>
+      <p>data/candidates.json（~2,290 檔全市場清單）</p>
+    </div>
+    <div class="flow-step">
+      <h4>四層篩選建池</h4>
+      <p>L1 流動性（均量 &ge;5,000 張、成交額 &ge;1 億、股價 10~800）&rarr; L2 技術面（ATR%、量能穩定）&rarr; L3 策略適性（產業分散、市值門檻）&rarr; L4 消息面排除（財報日、除權息）</p>
+    </div>
+    <div class="flow-step">
+      <h4>市場資料快取</h4>
+      <p>讀取 market_cache/ 快取 K 線資料（或退化 yfinance 即時下載）</p>
+    </div>
+    <div class="flow-step">
+      <h4>22 策略掃描</h4>
+      <p>逐檔執行 SIGNAL_FUNCS，計算 calc_indicators 指標後觸發訊號</p>
+    </div>
+    <div class="flow-step">
+      <h4>多維共振評分</h4>
+      <p>四大模組分 + 量價/扣抵/角度/籌碼/產業 RS 多維加分</p>
+    </div>
+    <div class="flow-step">
+      <h4>產出報告</h4>
+      <p>output/選股資料_YYYYMMDD.json + HTML + CSV 買進/賣出清單</p>
+    </div>
+    <div class="flow-step">
+      <h4>推播通知</h4>
+      <p>Discord Webhook + LINE Messaging API 推播訊號摘要</p>
+    </div>
+  </div>
+
+  <h3>即時報價資料流</h3>
+  <div class="flow-steps">
+    <div class="flow-step">
+      <h4>群益 SKCOM（主路徑）</h4>
+      <p>Windows 限定。Login &rarr; EnterMonitorLONG &rarr; RequestStocks 訂閱 &rarr; GetStockByNoLONG 取快照</p>
+    </div>
+    <div class="flow-step">
+      <h4>TWSE MIS（退化路徑）</h4>
+      <p>跨平台可用。TWSE 盤中個股行情 MIS API，雲端自動採用</p>
+    </div>
+    <div class="flow-step">
+      <h4>統一出口</h4>
+      <p>capital_adapter.get_realtime_quotes() &rarr; 前端儀表板 + 盤中六訊號觸發</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════ CONFIG ═══════════════════ -->
+<section id="config">
+  <span class="section-tag">Configuration</span>
+  <h2>參數配置系統</h2>
+  <p class="section-desc">全參數集中於 SignalRadarConfig dataclass，支援 Streamlit 即時調參與基因演算法自動搜尋。</p>
+
+  <div class="param-group">
+    <div class="param-group-header">均線 / 均量（費氏數列）</div>
+    <div class="param-row"><span class="param-name">ma_short</span><span class="param-desc">短期均線</span><span class="param-val">8</span></div>
+    <div class="param-row"><span class="param-name">ma_mid</span><span class="param-desc">中期均線</span><span class="param-val">21</span></div>
+    <div class="param-row"><span class="param-name">ma_long</span><span class="param-desc">多空分界線</span><span class="param-val">55</span></div>
+    <div class="param-row"><span class="param-name">ma_xlong</span><span class="param-desc">大趨勢輔助</span><span class="param-val">89</span></div>
+    <div class="param-row"><span class="param-name">mv_short</span><span class="param-desc">短期均量</span><span class="param-val">5</span></div>
+    <div class="param-row"><span class="param-name">mv_mid</span><span class="param-desc">中期均量</span><span class="param-val">13</span></div>
+    <div class="param-row"><span class="param-name">mv_long</span><span class="param-desc">大戰略均量</span><span class="param-val">34</span></div>
+  </div>
+
+  <div class="param-group">
+    <div class="param-group-header">量價門檻</div>
+    <div class="param-row"><span class="param-name">vol_up_ratio</span><span class="param-desc">量增定義</span><span class="param-val">&ge;1.3x</span></div>
+    <div class="param-row"><span class="param-name">vol_down_ratio</span><span class="param-desc">量縮定義</span><span class="param-val">&le;0.75x</span></div>
+    <div class="param-row"><span class="param-name">breakout_vol_ratio</span><span class="param-desc">突破放量門檻</span><span class="param-val">&ge;1.5x</span></div>
+    <div class="param-row"><span class="param-name">reclaim_ma20_vol_ratio</span><span class="param-desc">翻越 MA20 門檻</span><span class="param-val">&ge;1.8x</span></div>
+  </div>
+
+  <div class="param-group">
+    <div class="param-group-header">風控參數</div>
+    <div class="param-row"><span class="param-name">risk_per_trade_pct</span><span class="param-desc">單筆風險佔比</span><span class="param-val">1%</span></div>
+    <div class="param-row"><span class="param-name">max_position_pct</span><span class="param-desc">單筆倉位上限</span><span class="param-val">25%</span></div>
+    <div class="param-row"><span class="param-name">stop_loss_pct</span><span class="param-desc">硬性停損</span><span class="param-val">-7%</span></div>
+    <div class="param-row"><span class="param-name">take_profit_tiers</span><span class="param-desc">分批停利</span><span class="param-val">+8% 出五成、+10% 出兩成五</span></div>
+  </div>
+
+  <div class="param-group">
+    <div class="param-group-header">盤中六訊號</div>
+    <div class="param-row"><span class="param-name">lookback_bars</span><span class="param-desc">近 N 根高低點</span><span class="param-val">20</span></div>
+    <div class="param-row"><span class="param-name">b1/s1 vol_ratio</span><span class="param-desc">突破/跌破量增</span><span class="param-val">&ge;1.8x</span></div>
+    <div class="param-row"><span class="param-name">b2/s2 vol_ratio</span><span class="param-desc">惜售/止漲量縮</span><span class="param-val">&le;0.5x</span></div>
+    <div class="param-row"><span class="param-name">bin_minutes</span><span class="param-desc">K 棒時間框架</span><span class="param-val">5 分鐘</span></div>
+    <div class="param-row"><span class="param-name">poll_interval_min</span><span class="param-desc">輪詢間隔</span><span class="param-val">5 分鐘</span></div>
+  </div>
+
+  <div class="param-group">
+    <div class="param-group-header">相對強度與多維加分</div>
+    <div class="param-row"><span class="param-name">rs_percentile_min</span><span class="param-desc">RS 門檻</span><span class="param-val">&ge;80 百分位</span></div>
+    <div class="param-row"><span class="param-name">rs_lookback_days</span><span class="param-desc">RS 回看期</span><span class="param-val">60 日</span></div>
+    <div class="param-row"><span class="param-name">dim_bonus</span><span class="param-desc">多維共振加分</span><span class="param-val">2 維+2 / 3 維+4 / 4 維+7</span></div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════ ENGINES ═══════════════════ -->
+<section id="engines">
+  <span class="section-tag">Core Engines</span>
+  <h2>核心引擎與工具模組</h2>
+  <p class="section-desc">20+ 個中文命名引擎覆蓋策略、抓取、風控、通知全流程，搭配 signal_radar 整合層對外暴露穩定介面。</p>
+
+  <h3>策略與分析引擎（engines/）</h3>
+  <div class="cards">
+    <div class="card">
+      <div class="card-icon" style="background:rgba(79,140,255,0.12)">&#x1F4CA;</div>
+      <h4>短線交易回測</h4>
+      <p>22 個 SIGNAL_FUNCS + calc_indicators，系統的訊號源頭。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(245,158,11,0.12)">&#x1F50D;</div>
+      <h4>每日選股通知</h4>
+      <p>批次掃描選股池，多維共振評分產出買/賣/補漲三清單。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(236,72,153,0.12)">&#x26A1;</div>
+      <h4>盤中監控</h4>
+      <p>5 分鐘 K 即時觸發 B1~S3 六訊號，搭配推播即時提醒。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(34,197,94,0.12)">&#x1F30D;</div>
+      <h4>市場環境</h4>
+      <p>大盤強多/盤整/弱空三態判讀，作為策略環境閘門。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(124,92,252,0.12)">&#x1F4B0;</div>
+      <h4>籌碼面抓取</h4>
+      <p>三大法人買賣超 + 融資融券餘額，籌碼維度計分。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(6,182,212,0.12)">&#x1F3ED;</div>
+      <h4>產業類股指數</h4>
+      <p>28 個產業類股 RS 排名、輪動趨勢追蹤。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(239,68,68,0.12)">&#x1F6E1;</div>
+      <h4>風控守門員</h4>
+      <p>帳戶級倉位管理、單筆停損紀律、乖離警告。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(79,140,255,0.12)">&#x1F514;</div>
+      <h4>推送通知</h4>
+      <p>Discord Webhook + LINE Messaging API 雙通道推播。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(245,158,11,0.12)">&#x1F4E6;</div>
+      <h4>選股池建構器</h4>
+      <p>四層篩選（流動性/技術/策略適性/消息面），月度建池。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(34,197,94,0.12)">&#x1F4BE;</div>
+      <h4>市場資料快取</h4>
+      <p>全市場日 K 快取層，加速每日掃描（避免重複下載）。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(236,72,153,0.12)">&#x1F4C5;</div>
+      <h4>日曆抓取</h4>
+      <p>財報公告日、除權息日期，風控排除事件日。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:rgba(6,182,212,0.12)">&#x1F4C8;</div>
+      <h4>強勢回調選股</h4>
+      <p>特化策略：強勢股拉回至均線支撐後的買入時機。</p>
+    </div>
+  </div>
+
+  <h3>Signal Radar 整合層（signal_radar/）</h3>
+  <div class="cards">
+    <div class="card">
+      <h4>integration.py</h4>
+      <p>importlib 動態載入中文檔名引擎，對外提供英文命名穩定介面，import 失敗一律優雅降級。</p>
+    </div>
+    <div class="card">
+      <h4>strategies.py</h4>
+      <p>四大模組融合 + detect_intraday_six() 盤中六訊號 + fuse_signals() 綜合評分。</p>
+    </div>
+    <div class="card">
+      <h4>optimizer.py</h4>
+      <p>DEAP 遺傳演算法，30 個體 × 20 代演化，3 折交叉驗證，自動搜尋最優參數。</p>
+    </div>
+    <div class="card">
+      <h4>paper.py</h4>
+      <p>模擬交易紙上帳，支援開/平倉記錄，績效統計含 Sharpe Ratio / 最大回撤。</p>
+    </div>
+    <div class="card">
+      <h4>capital_adapter.py</h4>
+      <p>群益 SKCOM / TWSE MIS 統一即時報價介面，永不拋出例外。</p>
+    </div>
+    <div class="card">
+      <h4>regime_factors.py</h4>
+      <p>VIX、費半、ADR、期現貨價差等市場環境因子綜合判讀。</p>
+    </div>
+  </div>
+
+  <h3>工具模組（tools/）</h3>
+  <div class="cards">
+    <div class="card">
+      <h4>data_store.py</h4>
+      <p>SQLite 持久層，K 棒快取與查詢。</p>
+    </div>
+    <div class="card">
+      <h4>backup.py</h4>
+      <p>專案備份/還原（zip 壓縮存至 backups/）。</p>
+    </div>
+    <div class="card">
+      <h4>install_scheduler.py</h4>
+      <p>Windows 工作排程自動安裝（盤中監控定時啟動）。</p>
+    </div>
+    <div class="card">
+      <h4>atlas_dashboard.py</h4>
+      <p>靜態 HTML 首頁儀表板生成。</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════ TECH STACK ═══════════════════ -->
+<section id="tech">
+  <span class="section-tag">Technology Stack</span>
+  <h2>技術棧</h2>
+
+  <div class="stack-grid">
+    <div class="stack-item">
+      <div class="stack-name">Streamlit</div>
+      <div class="stack-use">互動儀表板 + 即時調參</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">Python 3.10+</div>
+      <div class="stack-use">全核心引擎後端</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">pandas / numpy</div>
+      <div class="stack-use">向量計算、時序分析</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">Plotly</div>
+      <div class="stack-use">互動式 K 線圖表</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">DEAP</div>
+      <div class="stack-use">遺傳演算法參數優化</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">yfinance</div>
+      <div class="stack-use">歷史 K 棒資料下載</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">SQLite</div>
+      <div class="stack-use">K 棒快取持久化</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">Capital SKCOM</div>
+      <div class="stack-use">群益即時報價 API</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">TWSE MIS</div>
+      <div class="stack-use">公開即時行情退化源</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">GitHub Actions</div>
+      <div class="stack-use">盤後自動掃描排程</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">Discord / LINE</div>
+      <div class="stack-use">訊號推播雙通道</div>
+    </div>
+    <div class="stack-item">
+      <div class="stack-name">Streamlit Cloud</div>
+      <div class="stack-use">雲端儀表板部署</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════ PRINCIPLES ═══════════════════ -->
+<section>
+  <span class="section-tag">Core Philosophy</span>
+  <h2>核心理念</h2>
+  <div class="cards" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+    <div class="card" style="border-left:3px solid var(--red)">
+      <h4 style="color:#f87171">量價為王</h4>
+      <p>成交量是價格的靈魂。先看量再看價，量是因、價是果。</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--gold)">
+      <h4 style="color:var(--gold)">均線不騙人</h4>
+      <p>費氏數列三層均線的扣抵狀態是最強超前指標，領先價格 3~7 天。</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--accent)">
+      <h4 style="color:var(--accent)">籌碼藏真理</h4>
+      <p>外資/融資動向往往領先技術面，籌碼集中度揭示主力意圖。</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--green)">
+      <h4 style="color:var(--green)">環境要順勢</h4>
+      <p>強多環境積極進場，弱空環境停止新開倉，環境閘門決定策略權重。</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--accent2)">
+      <h4 style="color:var(--accent2)">紀律第一</h4>
+      <p>硬性停損 -7% 絕無例外。分批停利（+8% 出五成、+10% 出兩成五），讓利潤奔跑。</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--cyan)">
+      <h4 style="color:var(--cyan)">多維共振</h4>
+      <p>量價、扣抵、籌碼、產業 RS 四維度同時確認，共振越多、勝率越高。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ FOOTER ═══════════════════ -->
+<footer>
+  <p><strong>Atlas Signal Radar</strong> &mdash; 台股量價訊號分析系統</p>
+  <p style="margin-top:0.5rem">蕭明道 &times; 林教授 &times; 廖崧沂 &mdash; 三流派融合的量化短線研究平台</p>
+  <p style="margin-top:0.3rem;font-size:0.8rem;color:#555">Built with Python &bull; Streamlit &bull; GitHub Actions &mdash; 2026</p>
+</footer>
+
+</body>
+</html>

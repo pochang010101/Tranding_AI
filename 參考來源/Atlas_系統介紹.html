@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas Signal Radar — 綜合系統介紹</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--ink:#1f2430;--muted:#6b7280;--accent:#4f46e5;--accent2:#7c3aed;--line:#e6e8ef;--up:#e4493b;--down:#1ea672;--code:#f3f4f6}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.75}
+.wrap{display:flex;max-width:1180px;margin:0 auto;gap:32px;padding:32px 20px}
+nav.toc{position:sticky;top:24px;align-self:flex-start;width:240px;flex:0 0 240px;font-size:.9rem;max-height:90vh;overflow:auto}
+nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:4px 10px;border-left:2px solid transparent;border-radius:4px}
+nav.toc a:hover{color:var(--accent);background:#eef0fc;border-left-color:var(--accent)}
+main{flex:1;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:40px 48px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+h1{font-size:2rem;margin:.2em 0 .1em;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+h2{font-size:1.4rem;margin-top:2em;padding-bottom:.3em;border-bottom:2px solid var(--line);scroll-margin-top:20px}
+h3{font-size:1.1rem;margin-top:1.6em;color:var(--accent)}
+p,li{color:#2b303b}
+a{color:var(--accent)}
+code{background:var(--code);padding:.15em .4em;border-radius:5px;font-family:"JetBrains Mono",Consolas,monospace;font-size:.88em}
+pre{background:#0f1426;color:#e6e8f0;padding:18px;border-radius:12px;overflow:auto;font-size:.85rem;line-height:1.55}
+pre code{background:none;color:inherit;padding:0}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92rem}
+th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+th{background:#f0f1f8}
+tr:nth-child(even) td{background:#fafbff}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.78rem;font-weight:600;background:#eef0fc;color:var(--accent)}
+.lead{font-size:1.08rem;color:var(--muted)}
+blockquote{border-left:4px solid var(--accent);margin:1em 0;padding:.4em 1em;background:#f7f7fe;color:#444;border-radius:0 8px 8px 0}
+.up{color:var(--up)}.down{color:var(--down)}
+header.doc{margin-bottom:1.5em}
+.meta{color:var(--muted);font-size:.85rem}
+footer{margin-top:3em;padding-top:1em;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
+@media(max-width:820px){.wrap{flex-direction:column;padding:16px}nav.toc{position:static;width:auto;flex:none}main{padding:24px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc">
+<a href="#intro">1. 系統簡介與定位</a>
+<a href="#deploy">2. 三層部署架構</a>
+<a href="#code">3. 程式碼分層</a>
+<a href="#strategy">4. 策略體系</a>
+<a href="#dataflow">5. 資料流</a>
+<a href="#pages">6. 儀表板九大分頁</a>
+<a href="#sources">7. 資料來源與更新時點</a>
+</nav>
+<main>
+<header class="doc">
+<h1>Atlas Signal Radar</h1>
+<p class="lead">台股量價研究與訊號分析系統 — 盤後選股 + 盤中即時觸發推送的決策助手</p>
+<p class="meta">文件：綜合系統介紹 ｜ 版本 v3.6 ｜ 更新 2026-06-18</p>
+<p class="meta">系列文件：<a href="Atlas_使用者操作手冊.html">Atlas 使用者操作手冊</a> ｜ <a href="Atlas_技術架構白皮書.html">Atlas 技術架構白皮書</a></p>
+</header>
+
+<section id="intro">
+<h2>1. 系統簡介與定位</h2>
+<p><strong>Atlas Signal Radar</strong> 是一套台股量價研究與訊號分析系統，核心定位是<strong>「盤後選股 + 盤中即時觸發推送」的決策助手</strong>，服務當沖、隔日沖與短線交易，<em>而非一套研究平台</em>。它把訊號送到你眼前、把進場時機推播到手機，最後的下單與紀律由人來執行。</p>
+
+<p>系統融合三大量價流派，交叉印證以提高訊號品質：</p>
+<table>
+<thead><tr><th>流派</th><th>內容</th></tr></thead>
+<tbody>
+<tr><td><span class="badge">① 經典量價派</span></td><td>量價時角 ＋ 供需原理</td></tr>
+<tr><td><span class="badge">② 籌碼學派</span></td><td>極短線 ／ 籌碼學派</td></tr>
+<tr><td><span class="badge">③ 學院派</span></td><td>學院派量價 ＋ 市面常見短線策略</td></tr>
+</tbody>
+</table>
+
+<blockquote>底層技術組成：Streamlit 儀表板 ＋ GitHub Actions 自動掃描 ＋ 群益即時報價。GitHub：<code>pochang010101/atlas-signal-radar</code>（private）。</blockquote>
+
+<h3>全域參數（費氏數列）</h3>
+<p>所有均線與量能均線皆採費氏數列作為基準，貫穿指標計算與策略條件：</p>
+<table>
+<thead><tr><th>類別</th><th>短</th><th>中</th><th>長</th><th>超長</th></tr></thead>
+<tbody>
+<tr><td>價格 MA</td><td>8</td><td>21</td><td>55</td><td>89</td></tr>
+<tr><td>量能 MA</td><td>5</td><td>13</td><td>34</td><td>—</td></tr>
+</tbody>
+</table>
+</section>
+
+<section id="deploy">
+<h2>2. 三層部署架構</h2>
+<p>Atlas 把職責切成三個獨立運行的層，各自在最適合的環境執行，彼此透過資料檔與推播串接：</p>
+<table>
+<thead><tr><th>層</th><th>環境</th><th>負責</th></tr></thead>
+<tbody>
+<tr><td><strong>Streamlit 儀表板</strong></td><td>Streamlit Cloud ／ 本機</td><td>UI、即時掃描、回測、K 線檢視</td></tr>
+<tr><td><strong>排程掃描 + 推播</strong></td><td>GitHub Actions（daily-scan workflow）</td><td>盤後自動掃描 → commit 選股資料 → Discord／LINE</td></tr>
+<tr><td><strong>群益即時行情</strong></td><td>本機 Windows only</td><td>Capital SKCOM API，雲端自動降級至 TWSE MIS</td></tr>
+</tbody>
+</table>
+<p>這樣的切分讓「自動化掃描＋推播」可以脫離本機、由 GitHub Actions 無人值守跑；而需要 Windows 原生 COM 元件的群益即時行情則留在本機，雲端環境自動降級為跨平台的 TWSE MIS，不會因環境差異而停擺。</p>
+</section>
+
+<section id="code">
+<h2>3. 程式碼分層</h2>
+<p>程式碼分為三層，由傳統中文檔名引擎、整合契約層、前端依序疊起：</p>
+<pre><code>主目錄 *.py（35 支）     傳統引擎（中文檔名）— 策略／抓取／風控／通知
+   ↕ importlib 動態載入
+signal_radar/（18 支）   整合契約層 — config / strategies / integration / capital_adapter
+   ↕ 統一介面
+streamlit_app/（15 支）  Streamlit 前端 — 9 個分頁 + 共用元件</code></pre>
+
+<h3>整合契約層（importlib 的關鍵設計）</h3>
+<p>核心關鍵在 <code>signal_radar/integration.py</code>：它用 <code>importlib</code> 動態載入中文檔名的傳統引擎，對外提供<strong>英文命名的穩定介面</strong>（如 <code>run_postmarket_scan</code>、<code>load_ohlcv</code>、<code>get_market_regime</code>）。任何引擎 <code>import</code> 失敗，一律以 <code>try/except</code> 優雅降級 — 即使某支引擎掛掉，Streamlit 也不會整個崩潰，只會少掉對應功能。</p>
+
+<table>
+<thead><tr><th>signal_radar/ 檔案</th><th>職責</th></tr></thead>
+<tbody>
+<tr><td><code>config.py</code></td><td>所有可調參數的 dataclass（<code>SignalRadarConfig</code>），含盤中六訊號門檻</td></tr>
+<tr><td><code>integration.py</code></td><td>包裝中文引擎，提供 <code>run_postmarket_scan</code> / <code>load_ohlcv</code> / <code>get_market_regime</code> 等</td></tr>
+<tr><td><code>strategies.py</code></td><td>三流派模組評分 + 盤中六訊號 <code>detect_intraday_six</code></td></tr>
+<tr><td><code>capital_adapter.py</code></td><td>群益／TWSE MIS 統一即時報價介面，永不拋例外</td></tr>
+<tr><td><code>optimizer.py</code></td><td>基因演算法策略參數優化</td></tr>
+<tr><td><code>paper.py</code></td><td>模擬交易（紙上交易）</td></tr>
+</tbody>
+</table>
+</section>
+
+<section id="strategy">
+<h2>4. 策略體系</h2>
+
+<h3>日 K 策略 22 個</h3>
+<p>集中於 <code>短線交易回測.py</code> 的 <code>SIGNAL_FUNCS</code>，分為六大家族，盤後對選股池逐檔評估：</p>
+<table>
+<thead><tr><th>家族</th><th>編號</th><th>數量</th></tr></thead>
+<tbody>
+<tr><td>O 系列</td><td>O-1 ~ O-5</td><td>5</td></tr>
+<tr><td>S 系列</td><td>S-1 ~ S-6</td><td>6</td></tr>
+<tr><td>K 系列</td><td>K-1 ~ K-3</td><td>3</td></tr>
+<tr><td>P 系列</td><td>P-1 ~ P-4</td><td>4</td></tr>
+<tr><td>T 系列</td><td>T-1 ~ T-2</td><td>2</td></tr>
+<tr><td>SD 系列</td><td>SD-1 ~ SD-4</td><td>4</td></tr>
+</tbody>
+</table>
+
+<h3>盤中六訊號</h3>
+<p>由 <code>signal_radar/strategies.py</code> 的 <code>detect_intraday_six</code> 在<strong>分鐘 K 即時觸發</strong>，多空各三：</p>
+<table>
+<thead><tr><th>方向</th><th>訊號</th></tr></thead>
+<tbody>
+<tr><td><span class="up">多（看漲）</span></td><td>B1 ／ B2 ／ B3</td></tr>
+<tr><td><span class="down">空（看跌）</span></td><td>S1 ／ S2 ／ S3</td></tr>
+</tbody>
+</table>
+<blockquote>多空互斥規則：B2（惜售）與 S2（止漲）是唯一可能衝突的配對 — 守住 MA20 支撐歸 B2、S2 不觸發；漲停鎖住則 B1／S2 不觸發、跌停鎖住則 S1 不觸發。</blockquote>
+
+<h3>多維共振評分</h3>
+<p>每檔候選股不是單一策略決定，而是經過<strong>六維交叉加分</strong>，避免單一面向誤判：</p>
+<pre><code>          ┌─ 技術 ─┐
+          ├─ 量價 ─┤
+共振評分 ──┼─ 型態 ─┼──► final_score（綜合分數，據此排序）
+          ├─ 籌碼 ─┤
+          ├─ 產業 ─┤
+          └─ 週線 ─┘</code></pre>
+</section>
+
+<section id="dataflow">
+<h2>5. 資料流</h2>
+
+<h3>盤後掃描資料流</h3>
+<pre><code>candidates.json（~96 檔，4 層篩選）
+   │
+   ▼
+每日選股通知.scan_today()
+   │  讀 market_cache/ 快取（或退化 yfinance）
+   ▼
+跑 22 個 SIGNAL_FUNCS
+   │
+   ▼
+多維共振評分（技術／量價／型態／籌碼／產業／週線）
+   │
+   ▼
+選股資料_YYYYMMDD.json + HTML + CSV</code></pre>
+
+<h3>選股池建構（每月 1 號重建）</h3>
+<pre><code>股票清單抓取.py ──► candidates.json（~1,700 檔）
+   │
+   ▼
+選股池建構器.py（4 層篩選）
+   ├─ L1 流動性   均量≥5000 張、成交額≥1 億、股價 10~800
+   ├─ L2 技術面   ATR%、量能穩定、排除連續漲跌停
+   ├─ L3 策略適性 產業分散、市值門檻
+   └─ L4 消息面   排除財報日、除權息日
+   │
+   ▼
+pool_YYYYMM.json（~96 檔）</code></pre>
+
+<h3>即時報價資料流</h3>
+<pre><code>群益 SKCOM（Windows，需 RequestStocks 訂閱否則 nClose=0）
+   │  失敗時降級
+   ▼
+TWSE MIS（跨平台）
+   │  統一出口
+   ▼
+capital_adapter.get_realtime_quotes()  ──►  前端（永不拋例外）</code></pre>
+</section>
+
+<section id="pages">
+<h2>6. 儀表板九大分頁一覽</h2>
+<p>Streamlit 前端共 9 個分頁，覆蓋從市場環境、選股、檢視到回測優化的完整工作流：</p>
+<table>
+<thead><tr><th>#</th><th>分頁</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>市場環境因子</td><td>大盤環境判讀、風控前置</td></tr>
+<tr><td>2</td><td>RS 強度與產業輪動</td><td>相對強弱與產業輪動觀察</td></tr>
+<tr><td>3</td><td>盤後選股</td><td>呼叫 <code>integration.run_postmarket_scan</code> 跑盤後掃描</td></tr>
+<tr><td>4</td><td>K 線量價檢視</td><td>個股 K 線與量價對照</td></tr>
+<tr><td>5</td><td>盤中即時雷達</td><td>即時報價 + 盤中六訊號觸發</td></tr>
+<tr><td>6</td><td>交易日誌與績效</td><td>交易紀錄與績效追蹤</td></tr>
+<tr><td>7</td><td>策略熱力圖與深度報告</td><td>策略表現熱力圖、個股深度報告</td></tr>
+<tr><td>8</td><td>回測與基因優化</td><td>回測與基因演算法參數優化</td></tr>
+<tr><td>9</td><td>策略與參數</td><td>策略說明與參數集中檢視</td></tr>
+</tbody>
+</table>
+</section>
+
+<section id="sources">
+<h2>7. 資料來源與更新時點</h2>
+<p>資料來源已於 <strong>2026-06 校正</strong>，以免費公開來源為主、群益 Capital 即時行情為輔：</p>
+<table>
+<thead><tr><th>資料類別</th><th>來源</th><th>說明 ／ 更新時點</th></tr></thead>
+<tbody>
+<tr><td>價量（EOD）</td><td>TWSE OpenAPI <code>STOCK_DAY_ALL</code></td><td>盤後全市場一次抓（約收盤後 1 小時）</td></tr>
+<tr><td>三大法人籌碼</td><td>證交所 RWD <code>T86</code></td><td>可帶日期、自動回溯最近交易日（約 16:00 後）；舊 <code>/v1/fund/T86</code> 已被證交所移除</td></tr>
+<tr><td>融資融券</td><td>TWSE OpenAPI <code>MI_MARGN</code></td><td>中文欄位</td></tr>
+<tr><td>國際面</td><td>yfinance</td><td>VIX／費半 SOX／台積電 ADR／道瓊・那斯達克・標普</td></tr>
+<tr><td>即時報價</td><td>群益 Capital SKCOM ／ TWSE MIS</td><td>本機 Windows 優先群益，雲端降級 MIS</td></tr>
+</tbody>
+</table>
+<blockquote>更新時點重點：<strong>價量約收盤後 1 小時</strong>可取得當日 EOD；<strong>籌碼（三大法人）約 16:00 後</strong>才公布，T86 會自動回溯到最近一個有資料的交易日。</blockquote>
+</section>
+
+<footer>
+<p>系列文件：<a href="Atlas_使用者操作手冊.html">Atlas 使用者操作手冊</a> ｜ <a href="Atlas_技術架構白皮書.html">Atlas 技術架構白皮書</a></p>
+<p>本文件由系統現況自動整理。Atlas Signal Radar v3.6 ｜ 更新 2026-06-18。</p>
+</footer>
+</main>
+</div>
+</body>
+</html>

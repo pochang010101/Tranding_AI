@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(curl -s http://localhost:8503/)",
+      "Bash(docker compose:*)",
+      "Bash(cd:*)",
+      "Bash(docker build:*)",
+      "Bash(docker info:*)",
+      "Bash(curl:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}

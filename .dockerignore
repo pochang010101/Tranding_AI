@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist
+build
+.eggs
+
+# Virtual environments
+.venv
+venv
+env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Tests (not needed in production image)
+tests/
+.pytest_cache
+.coverage
+htmlcov
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+*.pem
+*.key
+
+# Docker
+docker-compose*.yml
+
+# Misc
+.mypy_cache
+.ruff_cache
+models/*.pkl
+logs/

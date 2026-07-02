@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台股 AI 看盤系統 — 功能介紹</title>
+  <style>
+    :root {
+      --primary: #1a73e8;
+      --primary-dark: #0d47a1;
+      --accent: #ff6d00;
+      --bg: #f5f7fa;
+      --card-bg: #ffffff;
+      --text: #212529;
+      --text-light: #6c757d;
+      --border: #e0e4e8;
+      --green: #00c853;
+      --red: #ff1744;
+      --yellow: #ffd600;
+      --gradient: linear-gradient(135deg, #1a73e8 0%, #0d47a1 50%, #1a237e 100%);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    /* ===== Hero ===== */
+    .hero {
+      background: var(--gradient);
+      color: #fff;
+      padding: 80px 20px 60px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background: var(--bg);
+      clip-path: ellipse(55% 100% at 50% 100%);
+    }
+    .hero h1 {
+      font-size: 2.8rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+      margin-bottom: 16px;
+    }
+    .hero .subtitle {
+      font-size: 1.2rem;
+      opacity: 0.9;
+      max-width: 700px;
+      margin: 0 auto 30px;
+    }
+    .hero .badges {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .hero .badge {
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 6px 18px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      backdrop-filter: blur(4px);
+    }
+
+    /* ===== Container ===== */
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ===== Section ===== */
+    section {
+      padding: 60px 0;
+    }
+    section h2 {
+      font-size: 1.9rem;
+      font-weight: 700;
+      color: var(--primary-dark);
+      margin-bottom: 12px;
+      position: relative;
+      display: inline-block;
+    }
+    section h2::after {
+      content: '';
+      display: block;
+      width: 50px;
+      height: 4px;
+      background: var(--accent);
+      border-radius: 2px;
+      margin-top: 8px;
+    }
+    section .section-desc {
+      color: var(--text-light);
+      margin-bottom: 36px;
+      font-size: 1.05rem;
+    }
+
+    /* ===== Architecture ===== */
+    .arch-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      align-items: center;
+    }
+    .arch-layer {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 28px;
+      width: 100%;
+      max-width: 750px;
+      position: relative;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .arch-layer .layer-tag {
+      position: absolute;
+      top: -12px;
+      left: 24px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 14px;
+      border-radius: 10px;
+    }
+    .arch-layer h3 { font-size: 1.1rem; margin-bottom: 6px; }
+    .arch-layer p { font-size: 0.92rem; color: var(--text-light); }
+    .arch-arrow {
+      font-size: 1.6rem;
+      color: var(--primary);
+      line-height: 1;
+      padding: 4px 0;
+    }
+
+    /* ===== Feature Cards ===== */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 24px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    .card .card-icon {
+      font-size: 2rem;
+      margin-bottom: 12px;
+      display: inline-block;
+    }
+    .card h3 {
+      font-size: 1.15rem;
+      margin-bottom: 8px;
+      color: var(--primary-dark);
+    }
+    .card p { font-size: 0.93rem; color: var(--text-light); }
+    .card ul {
+      margin-top: 10px;
+      padding-left: 18px;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .card ul li { margin-bottom: 4px; }
+
+    /* ===== Indicator Table ===== */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .data-table th {
+      background: var(--primary);
+      color: #fff;
+      padding: 12px 16px;
+      text-align: left;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .data-table td {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: #f0f4ff; }
+    .data-table code {
+      background: #eef2ff;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: var(--primary-dark);
+    }
+
+    /* ===== Milestone Timeline ===== */
+    .timeline {
+      position: relative;
+      padding-left: 36px;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 14px;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: linear-gradient(to bottom, var(--primary), var(--accent));
+      border-radius: 2px;
+    }
+    .timeline-item {
+      position: relative;
+      margin-bottom: 32px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -30px;
+      top: 24px;
+      width: 14px;
+      height: 14px;
+      background: var(--primary);
+      border: 3px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 0 3px var(--primary);
+    }
+    .timeline-item h3 {
+      font-size: 1.1rem;
+      color: var(--primary-dark);
+      margin-bottom: 6px;
+    }
+    .timeline-item .ms-tag {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 8px;
+      margin-right: 8px;
+    }
+    .timeline-item p { font-size: 0.92rem; color: var(--text-light); margin-top: 6px; }
+
+    /* ===== Highlight Boxes ===== */
+    .highlight-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 20px;
+    }
+    .highlight-box {
+      background: var(--card-bg);
+      border-left: 4px solid var(--primary);
+      border-radius: 0 12px 12px 0;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .highlight-box.warn { border-left-color: var(--accent); }
+    .highlight-box.safe { border-left-color: var(--green); }
+    .highlight-box h4 {
+      font-size: 1rem;
+      margin-bottom: 6px;
+      color: var(--primary-dark);
+    }
+    .highlight-box p { font-size: 0.88rem; color: var(--text-light); }
+
+    /* ===== Cost Box ===== */
+    .cost-box {
+      background: linear-gradient(135deg, #1a237e, #0d47a1);
+      color: #fff;
+      border-radius: 14px;
+      padding: 32px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .cost-box h3 { font-size: 1.2rem; margin-bottom: 16px; }
+    .cost-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+      font-size: 0.95rem;
+    }
+    .cost-row:last-child { border-bottom: none; }
+    .cost-row .cost-val { font-weight: 700; color: var(--yellow); }
+    .cost-total {
+      margin-top: 12px;
+      text-align: center;
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--yellow);
+    }
+
+    /* ===== SOP Section ===== */
+    .sop-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    @media (max-width: 768px) {
+      .sop-cards { grid-template-columns: 1fr; }
+    }
+    .sop-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .sop-card .sop-time {
+      display: inline-block;
+      background: var(--primary);
+      color: #fff;
+      padding: 4px 16px;
+      border-radius: 16px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .sop-card h3 { font-size: 1.1rem; margin-bottom: 8px; }
+    .sop-card ul {
+      text-align: left;
+      padding-left: 18px;
+      font-size: 0.88rem;
+      color: var(--text-light);
+    }
+    .sop-card ul li { margin-bottom: 4px; }
+
+    /* ===== Scorer ===== */
+    .scorer-dims {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    .scorer-dim {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 20px;
+      text-align: center;
+      min-width: 150px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+    .scorer-dim .dim-score {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--primary);
+    }
+    .scorer-dim .dim-label {
+      font-size: 0.82rem;
+      color: var(--text-light);
+      margin-top: 4px;
+    }
+    .scorer-levels {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .scorer-level {
+      padding: 6px 18px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .scorer-level.lv-strong { background: #ffcdd2; color: #c62828; }
+    .scorer-level.lv-in { background: #c8e6c9; color: #2e7d32; }
+    .scorer-level.lv-neutral { background: #fff9c4; color: #f57f17; }
+    .scorer-level.lv-out { background: #e0e0e0; color: #616161; }
+
+    /* ===== Env Table ===== */
+    .env-table { margin-top: 20px; }
+
+    /* ===== Footer ===== */
+    footer {
+      background: #1a1a2e;
+      color: rgba(255,255,255,0.6);
+      text-align: center;
+      padding: 30px 20px;
+      font-size: 0.85rem;
+    }
+    footer a { color: var(--primary); text-decoration: none; }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 1.8rem; }
+      .card-grid { grid-template-columns: 1fr; }
+      .highlight-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ==================== Hero ==================== -->
+<header class="hero">
+  <h1>台股 AI 看盤系統</h1>
+  <p class="subtitle">
+    從資料擷取、技術指標、機器學習訓練、含成本回測，到 Gradio 互動儀表板與自動化 SOP——
+    一套完整的台股智慧看盤解決方案。
+  </p>
+  <div class="badges">
+    <span class="badge">Python 模組化架構</span>
+    <span class="badge">防未來函數設計</span>
+    <span class="badge">台股交易成本內建</span>
+    <span class="badge">Gradio 互動介面</span>
+    <span class="badge">Email 自動告警</span>
+    <span class="badge">Google Colab 相容</span>
+  </div>
+</header>
+
+<!-- ==================== 系統架構 ==================== -->
+<section>
+  <div class="container">
+    <h2>系統架構</h2>
+    <p class="section-desc">七層流水線設計，從原始數據到互動應用，層層遞進、職責分離。</p>
+    <div class="arch-flow">
+
+      <div class="arch-layer">
+        <span class="layer-tag">L1 資料層</span>
+        <h3>多來源資料整合</h3>
+        <p>yfinance 日線 OHLCV / FinMind 籌碼與財報 / TWSE·TPEX 上市櫃清單 / 大盤指數與匯率</p>
+      </div>
+      <div class="arch-arrow">&#x25BC;</div>
+
+      <div class="arch-layer">
+        <span class="layer-tag">L2 指標層</span>
+        <h3>技術指標（純函式設計）</h3>
+        <p>MA 五線譜 / RSI14 / MACD / 布林通道 / ATR 停損 — 吃 DataFrame 回 DataFrame，無副作用</p>
+      </div>
+      <div class="arch-arrow">&#x25BC;</div>
+
+      <div class="arch-layer">
+        <span class="layer-tag">L3 特徵層</span>
+        <h3>防未來函數特徵工程</h3>
+        <p>20+ 個特徵（報酬率、均線乖離、指標位置、量能、相對強弱、籌碼、財報）+ assert_no_lookahead 斷言</p>
+      </div>
+      <div class="arch-arrow">&#x25BC;</div>
+
+      <div class="arch-layer">
+        <span class="layer-tag">L4 標籤層</span>
+        <h3>標籤定義</h3>
+        <p>未來 N 日報酬 &gt; 門檻 → label = 1（買進），否則 0（觀望）；尾端自動剔除防污染</p>
+      </div>
+      <div class="arch-arrow">&#x25BC;</div>
+
+      <div class="arch-layer">
+        <span class="layer-tag">L5 訓練層</span>
+        <h3>時間序列切分 + RandomForest</h3>
+        <p>前 70% 訓練 / 後 30% 測試（嚴禁隨機洗牌）｜300 棵樹、max_depth=6、balanced 權重</p>
+      </div>
+      <div class="arch-arrow">&#x25BC;</div>
+
+      <div class="arch-layer">
+        <span class="layer-tag">L6 回測層</span>
+        <h3>含台股成本的向量化回測</h3>
+        <p>signal.shift(1) × 當日報酬｜手續費 + 證交稅 + 滑價 = 一進一出 0.685%｜完整績效指標</p>
+      </div>
+      <div class="arch-arrow">&#x25BC;</div>
+
+      <div class="arch-layer">
+        <span class="layer-tag">L7 應用層</span>
+        <h3>Gradio 儀表板 / Email 告警 / SOP 自動化</h3>
+        <p>個股分析面板、自選股雷達、盤前/盤中/盤後標準作業流程、SQLite 持久化</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 核心功能 ==================== -->
+<section style="background:#fff;">
+  <div class="container">
+    <h2>核心功能模組</h2>
+    <p class="section-desc">六大模組涵蓋完整的台股 AI 看盤閉環。</p>
+    <div class="card-grid">
+
+      <!-- 資料擷取 -->
+      <div class="card">
+        <div class="card-icon">&#x1F4E1;</div>
+        <h3>多來源資料擷取</h3>
+        <p>自動下載並清洗台股行情、籌碼、基本面與總經數據。</p>
+        <ul>
+          <li><strong>yfinance</strong> — 日線 OHLCV、加權指數、匯率</li>
+          <li><strong>FinMind API</strong> — 三大法人買賣超、融資融券餘額</li>
+          <li><strong>月營收 &amp; 毛利率</strong> — 公告日對齊防偷看</li>
+          <li><strong>TWSE / TPEX</strong> — 上市櫃動態清單（排除 ETF / 權證）</li>
+          <li><strong>節流機制</strong> — 0.6 秒/請求、超時重試</li>
+        </ul>
+      </div>
+
+      <!-- 技術指標 -->
+      <div class="card">
+        <div class="card-icon">&#x1F4C8;</div>
+        <h3>技術指標計算</h3>
+        <p>五大類指標，純函式設計，可任意組合疊加。</p>
+        <ul>
+          <li><strong>MA 五線譜</strong> — 5 / 10 / 20 / 60 / 120 日均線</li>
+          <li><strong>RSI 14</strong> — Wilder 平滑法，超買/超賣判定</li>
+          <li><strong>MACD</strong> — DIF / MACD / 柱狀體（12, 26, 9）</li>
+          <li><strong>布林通道</strong> — 上/中/下軌 + 帶寬</li>
+          <li><strong>ATR 14</strong> — 波動度 + 停損價建議</li>
+        </ul>
+      </div>
+
+      <!-- AI 模型 -->
+      <div class="card">
+        <div class="card-icon">&#x1F916;</div>
+        <h3>AI 機器學習引擎</h3>
+        <p>從特徵工程到模型訓練，內建防未來函數保護。</p>
+        <ul>
+          <li><strong>20+ 特徵</strong> — 報酬率、乖離、動能、量比、籌碼</li>
+          <li><strong>防未來函數</strong> — assert_no_lookahead 自動斷言</li>
+          <li><strong>RandomForest</strong> — 300 棵樹、balanced 權重</li>
+          <li><strong>時間切分</strong> — 前 70% / 後 30%，嚴禁洗牌</li>
+          <li><strong>特徵重要度</strong> — 自動排序、視覺化</li>
+        </ul>
+      </div>
+
+      <!-- 回測引擎 -->
+      <div class="card">
+        <div class="card-icon">&#x1F9EA;</div>
+        <h3>回測引擎</h3>
+        <p>向量化回測含台股實際交易成本，避免高估績效。</p>
+        <ul>
+          <li><strong>訊號延遲</strong> — signal.shift(1)，前日決策今日生效</li>
+          <li><strong>成本模型</strong> — 手續費 + 證交稅 + 滑價</li>
+          <li><strong>績效指標</strong> — 年化報酬、夏普值、MDD、勝率</li>
+          <li><strong>資金曲線</strong> — 含買賣點標記的視覺化圖表</li>
+          <li><strong>成本僅計進出</strong> — 持倉不動日無額外成本</li>
+        </ul>
+      </div>
+
+      <!-- Gradio UI -->
+      <div class="card">
+        <div class="card-icon">&#x1F5A5;</div>
+        <h3>Gradio 互動介面</h3>
+        <p>三大面板，瀏覽器即開即用，無需前端開發。</p>
+        <ul>
+          <li><strong>個股儀表板</strong> — K 線 + 指標 + 回測 + 特徵重要度（4 分頁）</li>
+          <li><strong>自選股雷達</strong> — 彩色表格、資金流向排序</li>
+          <li><strong>SOP 整合面板</strong> — 盤前 / 盤中 / 盤後一站式操作</li>
+          <li><strong>互動參數</strong> — 股票代號、年數、門檻即時調整</li>
+          <li><strong>HTML 彩色渲染</strong> — 買進/觀望狀態色彩區分</li>
+        </ul>
+      </div>
+
+      <!-- 通知 & SOP -->
+      <div class="card">
+        <div class="card-icon">&#x1F514;</div>
+        <h3>通知與自動化 SOP</h3>
+        <p>Email 推播 + 盤前/盤中/盤後標準作業流程。</p>
+        <ul>
+          <li><strong>Gmail SMTP</strong> — 應用程式密碼認證</li>
+          <li><strong>dry_run 安全預設</strong> — 預設只印不寄</li>
+          <li><strong>盤前簡報</strong> — 昨日結論、操作提醒、大盤環境</li>
+          <li><strong>盤中監控</strong> — ATR 停損、RSI 極值、爆量警示</li>
+          <li><strong>盤後選股</strong> — 自動掃描 + SQLite 紀錄歸檔</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 技術指標一覽 ==================== -->
+<section>
+  <div class="container">
+    <h2>技術指標一覽</h2>
+    <p class="section-desc">所有指標均為純函式設計：輸入 DataFrame，輸出新 DataFrame，無副作用。</p>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>指標</th>
+          <th>函式</th>
+          <th>輸出欄位</th>
+          <th>用途</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>均線</strong></td>
+          <td><code>add_ma(df, windows)</code></td>
+          <td>ma5, ma10, ma20, ma60, ma120</td>
+          <td>趨勢識別、支撐壓力</td>
+        </tr>
+        <tr>
+          <td><strong>RSI</strong></td>
+          <td><code>add_rsi(df, period=14)</code></td>
+          <td>rsi14</td>
+          <td>超買（&gt;70）/ 超賣（&lt;30）判定</td>
+        </tr>
+        <tr>
+          <td><strong>MACD</strong></td>
+          <td><code>add_macd(df, params)</code></td>
+          <td>dif, macd, macd_hist</td>
+          <td>動能確認、柱翻正/翻負</td>
+        </tr>
+        <tr>
+          <td><strong>布林通道</strong></td>
+          <td><code>add_bbands(df, period, k)</code></td>
+          <td>bb_mid, bb_upper, bb_lower, bb_width</td>
+          <td>波動收斂/擴張、軌道突破</td>
+        </tr>
+        <tr>
+          <td><strong>ATR</strong></td>
+          <td><code>add_atr(df, period, stop_k)</code></td>
+          <td>atr14, stop_long, stop_short</td>
+          <td>波動度量化、停損價建議</td>
+        </tr>
+        <tr>
+          <td><strong>K 線圖</strong></td>
+          <td><code>candle_chart(df, ticker)</code></td>
+          <td>Plotly 互動蠟燭圖</td>
+          <td>價量視覺化分析</td>
+        </tr>
+        <tr>
+          <td><strong>量能剖面</strong></td>
+          <td><code>volume_profile_chart(df)</code></td>
+          <td>橫向量價分布圖</td>
+          <td>關鍵價位量能集中區</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================== 特徵工程 ==================== -->
+<section style="background:#fff;">
+  <div class="container">
+    <h2>特徵工程（20+ 特徵）</h2>
+    <p class="section-desc">所有特徵只使用當日（含）以前資料，搭配 assert_no_lookahead 斷言自動驗證。</p>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>類別</th>
+          <th>特徵欄位</th>
+          <th>說明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>報酬率</strong></td>
+          <td><code>ret1, ret5, ret20</code></td>
+          <td>1 / 5 / 20 日歷史報酬</td>
+        </tr>
+        <tr>
+          <td><strong>均線乖離</strong></td>
+          <td><code>bias5, bias20, bias60</code></td>
+          <td>收盤價相對均線偏離度</td>
+        </tr>
+        <tr>
+          <td><strong>均線排列</strong></td>
+          <td><code>ma5_gt_ma20, ma20_gt_ma60</code></td>
+          <td>多空排列布林值（0/1）</td>
+        </tr>
+        <tr>
+          <td><strong>指標位置</strong></td>
+          <td><code>rsi14, macd_hist, dif, bb_pos, bb_width</code></td>
+          <td>各指標當前數值</td>
+        </tr>
+        <tr>
+          <td><strong>波動</strong></td>
+          <td><code>atr_ratio, vol20</code></td>
+          <td>ATR 比率、20 日波動率</td>
+        </tr>
+        <tr>
+          <td><strong>量能</strong></td>
+          <td><code>vol_ratio5, vol_chg</code></td>
+          <td>5 日量比、量能變化</td>
+        </tr>
+        <tr>
+          <td><strong>相對強弱</strong></td>
+          <td><code>rel_strength, twii_ret</code></td>
+          <td>個股 vs 大盤表現</td>
+        </tr>
+        <tr>
+          <td><strong>籌碼面</strong></td>
+          <td><code>foreign_net, invest_trust_net, dealer_net, foreign_buy_streak, margin_chg5, short_chg5</code></td>
+          <td>三大法人 + 融資融券動態</td>
+        </tr>
+        <tr>
+          <td><strong>基本面</strong></td>
+          <td><code>rev_yoy, gross_margin</code></td>
+          <td>月營收 YoY、季毛利率（公告日對齊）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================== 資金流向評分 ==================== -->
+<section>
+  <div class="container">
+    <h2>資金流向評分引擎</h2>
+    <p class="section-desc">五大維度綜合判斷，結合模型訊號交叉驗證，過濾虛假信號。</p>
+
+    <div class="scorer-dims">
+      <div class="scorer-dim">
+        <div class="dim-score">&#x1F4CA;</div>
+        <div class="dim-label">量能異動</div>
+      </div>
+      <div class="scorer-dim">
+        <div class="dim-score">&#x1F4B9;</div>
+        <div class="dim-label">價量配合</div>
+      </div>
+      <div class="scorer-dim">
+        <div class="dim-score">&#x1F4AA;</div>
+        <div class="dim-label">相對強弱</div>
+      </div>
+      <div class="scorer-dim">
+        <div class="dim-score">&#x1F4C8;</div>
+        <div class="dim-label">趨勢承接</div>
+      </div>
+      <div class="scorer-dim">
+        <div class="dim-score">&#x1F3E6;</div>
+        <div class="dim-label">籌碼面向</div>
+      </div>
+    </div>
+
+    <div class="scorer-levels">
+      <span class="scorer-level lv-strong">&ge; 75 資金強力流入</span>
+      <span class="scorer-level lv-in">&ge; 55 資金流入</span>
+      <span class="scorer-level lv-neutral">&ge; 35 中性</span>
+      <span class="scorer-level lv-out">&lt; 35 資金流出</span>
+    </div>
+
+    <div style="margin-top:24px; text-align:center;">
+      <p style="color:var(--text-light); font-size:0.9rem;">
+        <strong>交叉驗證機制：</strong>模型建議買進但資金流出 → 不建議買進（避免追高套牢）
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 台股交易成本 ==================== -->
+<section style="background:#fff;">
+  <div class="container">
+    <h2>台股交易成本模型</h2>
+    <p class="section-desc">內建台股實際成本結構，回測結果貼近真實損益。</p>
+
+    <div class="cost-box">
+      <h3>一進一出完整成本</h3>
+      <div class="cost-row">
+        <span>買進手續費</span>
+        <span class="cost-val">0.1425%</span>
+      </div>
+      <div class="cost-row">
+        <span>買進滑價</span>
+        <span class="cost-val">0.05%</span>
+      </div>
+      <div class="cost-row">
+        <span>賣出手續費</span>
+        <span class="cost-val">0.1425%</span>
+      </div>
+      <div class="cost-row">
+        <span>賣出證交稅</span>
+        <span class="cost-val">0.3%</span>
+      </div>
+      <div class="cost-row">
+        <span>賣出滑價</span>
+        <span class="cost-val">0.05%</span>
+      </div>
+      <div class="cost-total">合計 &asymp; 0.685%</div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SOP 自動化 ==================== -->
+<section>
+  <div class="container">
+    <h2>盤前 / 盤中 / 盤後 SOP</h2>
+    <p class="section-desc">三階段標準作業流程，搭配 SQLite 持久化與 Email 推播。</p>
+
+    <div class="sop-cards">
+
+      <div class="sop-card">
+        <span class="sop-time">08:00 盤前</span>
+        <h3>晨間簡報</h3>
+        <ul>
+          <li>彙整昨日盤後選股結論</li>
+          <li>操作提醒（停損價、RSI、均線支撐）</li>
+          <li>大盤環境評估（趨勢、動能）</li>
+          <li>可選寄出 Email 簡報</li>
+        </ul>
+      </div>
+
+      <div class="sop-card">
+        <span class="sop-time">09:00–13:30 盤中</span>
+        <h3>即時風控監控</h3>
+        <ul>
+          <li>ATR 停損價跌破警示</li>
+          <li>RSI 超買（&gt;80）/ 超賣（&lt;20）</li>
+          <li>爆量警示（vol_ratio &gt; 2.0）</li>
+          <li>布林通道突破</li>
+          <li>MA 黃金/死亡交叉</li>
+          <li>MACD 柱翻正/翻負</li>
+          <li>當日大幅波動（&pm;5%）</li>
+        </ul>
+      </div>
+
+      <div class="sop-card">
+        <span class="sop-time">14:00 盤後</span>
+        <h3>自動選股掃描</h3>
+        <ul>
+          <li>掃描自選股 + 市場掃描池</li>
+          <li>模型買進機率計算</li>
+          <li>資金流向評分排序</li>
+          <li>結果存入 SQLite 歸檔</li>
+          <li>可選 Email 通知</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 里程碑教學路線 ==================== -->
+<section style="background:#fff;">
+  <div class="container">
+    <h2>教學里程碑路線 A &rarr; D</h2>
+    <p class="section-desc">五個漸進式里程碑，每個 Notebook 可獨立執行，也可依序串連完整威力。</p>
+
+    <div class="timeline">
+
+      <div class="timeline-item">
+        <h3><span class="ms-tag">A</span>技術指標基礎</h3>
+        <p>yfinance 取得台股日線 → MA 五線譜 + RSI + MACD + 布林 + ATR → Plotly 互動 K 線圖，建立量價分析的基本視角。</p>
+      </div>
+
+      <div class="timeline-item">
+        <h3><span class="ms-tag">B</span>籌碼 + 財報 + 總經</h3>
+        <p>串接 FinMind API，加入三大法人買賣超、融資融券、月營收 YoY、季度毛利率、加權指數與匯率，打造多維度主表。</p>
+      </div>
+
+      <div class="timeline-item">
+        <h3><span class="ms-tag">C</span>AI 訓練 + 回測</h3>
+        <p>特徵工程（20+ 特徵）→ 標籤定義 → RandomForest 分類器 → 時間序列切分 → 含台股成本回測 → 績效評估。</p>
+      </div>
+
+      <div class="timeline-item">
+        <h3><span class="ms-tag">C+</span>StockAnalyzer 套件化</h3>
+        <p>將 C 的邏輯重構為 StockAnalyzer 門面類別 + stock_ai_project 模組化套件，支援鏈式呼叫與一行執行。</p>
+      </div>
+
+      <div class="timeline-item">
+        <h3><span class="ms-tag">D</span>UI + 自動化 + 通知</h3>
+        <p>Gradio 個股儀表板 + 自選股雷達 + 盤前/盤中/盤後 SOP + Email 告警 + SQLite 持久化，完成完整閉環。</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ==================== StockAnalyzer 門面 ==================== -->
+<section>
+  <div class="container">
+    <h2>StockAnalyzer 一行呼叫</h2>
+    <p class="section-desc">統一門面類別，支援鏈式呼叫與逐步操作。</p>
+
+    <div class="card" style="max-width:700px; margin:0 auto;">
+      <pre style="background:#1a1a2e; color:#e0e0e0; padding:20px; border-radius:10px; overflow-x:auto; font-size:0.9rem; line-height:1.6;">
+<span style="color:#6c9ef8;">from</span> stock_ai.config <span style="color:#6c9ef8;">import</span> CONFIG
+<span style="color:#6c9ef8;">from</span> stock_ai.analyzer <span style="color:#6c9ef8;">import</span> StockAnalyzer
+
+<span style="color:#8a8a8a;"># 一鍵跑完整流程</span>
+result = StockAnalyzer(CONFIG).run()
+
+<span style="color:#8a8a8a;"># 或逐步操作（便於除錯）</span>
+analyzer = StockAnalyzer(CONFIG)
+analyzer.load()              <span style="color:#8a8a8a;"># 抓資料</span>
+analyzer.add_indicators()    <span style="color:#8a8a8a;"># 套指標</span>
+analyzer.build_features()    <span style="color:#8a8a8a;"># 建特徵</span>
+analyzer.train()             <span style="color:#8a8a8a;"># 訓練模型</span>
+analyzer.backtest()          <span style="color:#8a8a8a;"># 含成本回測</span>
+analyzer.latest_signals()    <span style="color:#8a8a8a;"># 最新買賣建議</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 防坑設計 ==================== -->
+<section style="background:#fff;">
+  <div class="container">
+    <h2>防坑設計 &amp; 獨特優勢</h2>
+    <p class="section-desc">針對量化回測常見陷阱，內建多重防護機制。</p>
+
+    <div class="highlight-grid">
+
+      <div class="highlight-box safe">
+        <h4>防未來函數三層檢查</h4>
+        <p>特徵只用當日以前資料、公告日對齊偏移 90 天、assert_no_lookahead 自動斷言驗證。</p>
+      </div>
+
+      <div class="highlight-box safe">
+        <h4>訊號延遲一日</h4>
+        <p>signal.shift(1) &times; 當日報酬：前日收盤決策，今日才生效，杜絕偷看當日資訊。</p>
+      </div>
+
+      <div class="highlight-box safe">
+        <h4>時間序列嚴格切分</h4>
+        <p>前 70% 訓練、後 30% 測試，嚴禁隨機洗牌，真實反映上線後表現。</p>
+      </div>
+
+      <div class="highlight-box">
+        <h4>台股成本最精確</h4>
+        <p>手續費 + 證交稅 + 滑價完整計入，一進一出 0.685%，避免績效灌水。</p>
+      </div>
+
+      <div class="highlight-box warn">
+        <h4>dry_run 安全預設</h4>
+        <p>Email 通知預設只印不寄（dry_run=True），避免誤觸發批量郵件。</p>
+      </div>
+
+      <div class="highlight-box">
+        <h4>金鑰零寫死</h4>
+        <p>所有 API Token、Gmail 密碼一律由環境變數讀取，原始碼中不留任何敏感資訊。</p>
+      </div>
+
+      <div class="highlight-box safe">
+        <h4>模型 &times; 資金交叉驗證</h4>
+        <p>模型買進但資金流出 → 不建議買進，雙重確認降低虛假訊號。</p>
+      </div>
+
+      <div class="highlight-box">
+        <h4>純看盤不下單</h4>
+        <p>Gradio 介面提供分析與看盤，不涉及實際下單，使用安全無風險。</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 環境變數 ==================== -->
+<section>
+  <div class="container">
+    <h2>環境變數設定</h2>
+    <p class="section-desc">依里程碑漸進需要，金鑰一律從環境變數讀取。</p>
+
+    <table class="data-table env-table">
+      <thead>
+        <tr>
+          <th>變數名稱</th>
+          <th>用途</th>
+          <th>必要性</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>FINMIND_TOKEN</code></td>
+          <td>FinMind API 認證（籌碼、財報資料）</td>
+          <td>里程碑 B 起需要</td>
+        </tr>
+        <tr>
+          <td><code>GMAIL_USER</code></td>
+          <td>寄件 Gmail 帳號</td>
+          <td>里程碑 D Email 通知</td>
+        </tr>
+        <tr>
+          <td><code>GMAIL_APP_PASSWORD</code></td>
+          <td>Gmail 應用程式密碼</td>
+          <td>里程碑 D Email 通知</td>
+        </tr>
+        <tr>
+          <td><code>MAIL_TO</code></td>
+          <td>收件人 Email 地址</td>
+          <td>里程碑 D Email 通知</td>
+        </tr>
+        <tr>
+          <td><code>STOCK_AI_DB</code></td>
+          <td>SQLite 資料庫檔案路徑</td>
+          <td>選用（預設 stock_ai.db）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================== 依賴套件 ==================== -->
+<section style="background:#fff;">
+  <div class="container">
+    <h2>技術規格</h2>
+    <p class="section-desc">核心依賴與執行環境。</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h3>核心依賴套件</h3>
+        <ul>
+          <li><strong>yfinance</strong> — 台股行情、大盤指數、匯率</li>
+          <li><strong>pandas / numpy</strong> — 資料處理與數值計算</li>
+          <li><strong>scikit-learn</strong> — RandomForest 與評估指標</li>
+          <li><strong>plotly</strong> — 互動圖表</li>
+          <li><strong>gradio</strong> — Web UI 介面</li>
+          <li><strong>requests</strong> — FinMind HTTP 客戶端</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>執行環境</h3>
+        <ul>
+          <li><strong>Google Colab</strong> — Notebook 直接執行（推薦教學用）</li>
+          <li><strong>本地 Python 3.10+</strong> — stock_ai_project 套件安裝</li>
+          <li><strong>SQLite 3</strong> — 內建持久化（無需額外資料庫）</li>
+          <li><strong>Gmail SMTP</strong> — Email 告警（選用）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 完整功能一覽 ==================== -->
+<section>
+  <div class="container">
+    <h2>完整功能一覽表</h2>
+    <p class="section-desc">16 大功能模組，涵蓋從數據到應用的完整閉環。</p>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>功能分類</th>
+          <th>主要模組</th>
+          <th>說明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>價量資料</strong></td><td>data/price.py</td><td>yfinance 日線下載與清洗</td></tr>
+        <tr><td><strong>籌碼資料</strong></td><td>data/chip.py</td><td>三大法人買賣超、融資融券</td></tr>
+        <tr><td><strong>基本面</strong></td><td>data/fundamental.py</td><td>月營收 YoY、季毛利率（公告日對齊）</td></tr>
+        <tr><td><strong>總經數據</strong></td><td>data/macro.py</td><td>加權指數、美元兌台幣匯率</td></tr>
+        <tr><td><strong>掃描池</strong></td><td>data/universe.py</td><td>上市櫃動態清單（排除 ETF / 權證）</td></tr>
+        <tr><td><strong>持久化</strong></td><td>data/db.py</td><td>SQLite 自選股、訊號、警示歸檔</td></tr>
+        <tr><td><strong>技術指標</strong></td><td>indicators/</td><td>MA、RSI、MACD、布林、ATR（5 類 12+ 指標）</td></tr>
+        <tr><td><strong>K 線繪製</strong></td><td>indicators/chart.py</td><td>Plotly 蠟燭圖 + 量能剖面圖</td></tr>
+        <tr><td><strong>特徵工程</strong></td><td>ai/features.py</td><td>20+ 特徵 + 防未來函數斷言</td></tr>
+        <tr><td><strong>模型訓練</strong></td><td>ai/train.py</td><td>時間切分 + RandomForest</td></tr>
+        <tr><td><strong>資金評分</strong></td><td>ai/scorer.py</td><td>五維度資金流向綜合判斷</td></tr>
+        <tr><td><strong>回測引擎</strong></td><td>backtest/engine.py</td><td>向量化回測含台股成本</td></tr>
+        <tr><td><strong>相關分析</strong></td><td>analysis/corr.py</td><td>相關係數矩陣 + 熱力圖</td></tr>
+        <tr><td><strong>看盤介面</strong></td><td>app/</td><td>Gradio 儀表板 + 自選股雷達 + SOP 面板</td></tr>
+        <tr><td><strong>Email 告警</strong></td><td>notify/email.py</td><td>Gmail SMTP 推播（dry_run 預設）</td></tr>
+        <tr><td><strong>SOP 自動化</strong></td><td>sop/</td><td>盤前簡報 / 盤中監控 / 盤後選股掃描</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ==================== Footer ==================== -->
+<footer>
+  <p>台股 AI 看盤系統 &mdash; MasterTalks 課程專案</p>
+  <p style="margin-top:6px;">Python &bull; scikit-learn &bull; Plotly &bull; Gradio &bull; SQLite</p>
+</footer>
+
+</body>
+</html>
