@@ -17,21 +17,26 @@
   - 12 DB performance indexes via Alembic migration
 - **Phase 8 - Presentation Real Data**:
   - `atlas/presentation/service_container.py` — shared backend services with caching
-  - All 13 Streamlit pages converted from placeholder to real data:
-    - P-01 Dashboard: ^TWII regime + live quotes
-    - P-02 Premarket: US index/stock quotes
-    - P-03 Radar: session_state signals + real P&L
-    - P-04 Screener: 30-stock scan with indicator scoring
-    - P-05 Universe: 4-layer real filtering
-    - P-06 Portfolio: paper trading positions + equity curve
-    - P-07 Backtest: real BacktestEngine + MonteCarloSimulator
-    - P-08 IPO: session_state tracking + live quotes
-    - P-09 Industry: real RS calculation + volume fund flow proxy
-    - P-10 Scheduler: real Scheduler/WorkflowEngine
-    - P-11 Settings: env vars + health checks
-    - P-12 K-line: yfinance + indicators + SMC overlay
-    - P-13 Paper Trading: buy/sell/positions/equity curve
+  - All 13 Streamlit pages converted from placeholder to real data
   - Docker rebuild verified, app running on :8501
+- **Phase 9 - Data Sources & Automation**:
+  - Notification wiring (Discord/Telegram/LINE) in WorkflowEngine
+  - Walk-Forward backtest fix (param_scan for in-sample optimization)
+  - TWSE/TPEx OpenData integration (MIS quotes, T86 institutional, MI_MARGN margin)
+  - Fundamental data (quarterly financials via service_container)
+  - Institutional flow + margin data APIs
+  - Performance benchmark script (scripts/benchmark.py)
+  - IPO auto-fetch from TWSE newlisting + TPEx
+- **Phase 10 - Enhancement Features** (6 parallel agents):
+  - OTC (.TWO) stock support in quote_adapter + service_container
+  - Quarterly financials fetcher (MOPS HTML parsing + yfinance fallback)
+  - WebSocket real-time push service (RealtimePushService with background thread)
+  - Streamlit authentication (login form with env var credentials)
+  - PWA mobile support (manifest.json, service worker, responsive CSS)
+  - ML training pipeline (feature engineering, RandomForest, model persistence)
+  - pd.read_html StringIO fix for Python 3.14 compatibility
+  - asyncio.run() fix for Python 3.14 test compatibility
+  - **248 tests passing**
 
 ### Key Decisions
 - asyncpg added for async DB operations in scripts
@@ -39,14 +44,15 @@
 - QuoteAdapter rejects price=0 to trigger fallback chain
 - Custom cron scheduler (not APScheduler) — simpler, fewer deps
 - service_container pattern: @st.cache_resource for singletons, @st.cache_data(ttl) for data
+- 6 parallel subagents for independent feature development (OTC/financials/WS/auth/PWA/ML)
+- pd.read_html requires StringIO wrapper in Python 3.14+
 
 ### Current Blockers
 - None
 
 ### Next Steps
-1. Notification channel wiring (Discord/LINE/Telegram)
-2. Walk-Forward automated backtesting
-3. Real TWSE/TPEx data source integration (beyond yfinance)
-4. Fundamental data (financials/revenue)
-5. Institutional flow data (三大法人/融資融券)
-6. Stress testing + performance optimization
+1. E2E integration tests (real DB + API connectivity)
+2. Stress testing / performance optimization
+3. Docker image rebuild with all new features
+4. Production deployment (SSL + reverse proxy)
+5. Monitoring / Alerting (Prometheus + Grafana)
