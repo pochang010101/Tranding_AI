@@ -21,7 +21,9 @@
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_financials.py::TestFetchQuarterlyFinancialsMops::test_returns_expected_keys -x --tb=long)",
       "Bash(PYTHONPATH=. python -c \"\nimport ast\nwith open\\('atlas/infrastructure/data_manager.py'\\) as f:\n    tree = ast.parse\\(f.read\\(\\)\\)\nfor node in ast.walk\\(tree\\):\n    if isinstance\\(node, ast.AsyncFunctionDef\\) and 'quarterly' in node.name.lower\\(\\):\n        print\\(f'{node.name}: line {node.lineno}-{node.end_lineno}'\\)\n\")",
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_financials.py -x -q --tb=short)",
-      "Bash(PYTHONPATH=. python -m pytest tests/ -q --tb=short)"
+      "Bash(PYTHONPATH=. python -m pytest tests/ -q --tb=short)",
+      "Bash(PYTHONPATH=. python scripts/train_model.py)",
+      "Bash(PYTHONPATH=. python scripts/verify_e2e.py 2>&1)"
     ]
   }
 }
