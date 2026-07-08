@@ -32,7 +32,9 @@
       "Bash(while read:*)",
       "Bash(do sed:*)",
       "Bash(grep -v \"^$\")",
-      "Bash(docker context:*)"
+      "Bash(docker context:*)",
+      "Read(//c/Pochang/**)",
+      "Read(//c/Pochang/webapp/**)"
     ]
   }
 }
