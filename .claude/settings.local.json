@@ -31,7 +31,8 @@
       "Bash(find atlas:*)",
       "Bash(while read:*)",
       "Bash(do sed:*)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(docker context:*)"
     ]
   }
 }
