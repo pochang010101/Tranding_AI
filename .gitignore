@@ -49,3 +49,4 @@ htmlcov/
 # Logs & models
 logs/
 models/*.pkl
+files.zip
