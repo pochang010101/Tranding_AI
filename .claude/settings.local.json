@@ -37,7 +37,10 @@
       "Read(//c/Pochang/webapp/**)",
       "Bash(powershell -Command \"Get-ChildItem //./pipe/ | Where-Object { $_.Name -like '*docker*' } | Select-Object Name\")",
       "Bash(powershell -Command '[System.IO.Directory]::GetFiles\\(\"\\\\\\\\.\\\\pipe\\\\\"\\) | Where-Object { $_ -match \"docker\" }')",
-      "Bash(tasklist)"
+      "Bash(tasklist)",
+      "Bash(cmd.exe /c \"docker ps\" 2>&1)",
+      "Bash(cmd.exe /c \"docker ps\")",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }
