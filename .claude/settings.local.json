@@ -34,7 +34,10 @@
       "Bash(grep -v \"^$\")",
       "Bash(docker context:*)",
       "Read(//c/Pochang/**)",
-      "Read(//c/Pochang/webapp/**)"
+      "Read(//c/Pochang/webapp/**)",
+      "Bash(powershell -Command \"Get-ChildItem //./pipe/ | Where-Object { $_.Name -like '*docker*' } | Select-Object Name\")",
+      "Bash(powershell -Command '[System.IO.Directory]::GetFiles\\(\"\\\\\\\\.\\\\pipe\\\\\"\\) | Where-Object { $_ -match \"docker\" }')",
+      "Bash(tasklist)"
     ]
   }
 }
