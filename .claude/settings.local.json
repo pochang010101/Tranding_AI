@@ -41,7 +41,8 @@
       "Bash(cmd.exe /c \"docker ps\" 2>&1)",
       "Bash(cmd.exe /c \"docker ps\")",
       "Bash(echo \"EXIT: $?\")",
-      "Bash(wsl:*)"
+      "Bash(wsl:*)",
+      "Bash(pip show:*)"
     ]
   }
 }
