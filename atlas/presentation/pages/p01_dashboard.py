@@ -104,6 +104,14 @@ def render() -> None:
                     status="positive" if "+" in adl_text else "negative" if "-" in adl_text else "neutral"),
                     unsafe_allow_html=True)
 
+    st.markdown("""
+    <div class="legend-box">
+    <strong>指標說明</strong><br>
+    <span class="legend-good">大盤趨勢</span>：MA8 &gt; MA21 且收盤 &gt; MA8 = <span class="legend-good">多頭</span>、反之 = <span class="legend-bad">空頭</span>、其餘 = <span class="legend-warn">盤整</span><br>
+    <span class="legend-good">情緒指數</span>：以 RSI 衡量，<span class="legend-good">&gt;55 偏貪婪（多方）</span>、<span class="legend-bad">&lt;45 偏恐懼（空方）</span>、45~55 中性
+    </div>
+    """, unsafe_allow_html=True)
+
     # ── Row 2: 情緒儀表 + 權值股即時報價 ─────────
     st.divider()
     col_a, col_b = st.columns([1, 2])

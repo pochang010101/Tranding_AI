@@ -160,6 +160,20 @@ def render() -> None:
 
     run_btn = st.button("🔍 執行掃描", type="primary", width="stretch")
 
+    # 圖例說明
+    st.markdown("""
+    <div class="legend-box">
+    <strong>欄位說明</strong><br>
+    <span class="legend-good">主軸總分</span>：0~100 綜合評分（技術50%＋動能30%＋RS20%），<span class="legend-good">≥62 佳</span>、<span class="legend-bad">&lt;38 差</span><br>
+    <span class="legend-good">技術分</span>：RSI 40~75 區間 + 收盤 &gt; MA21 + MACD柱 &gt; 0，<span class="legend-good">≥60 正面</span><br>
+    <span class="legend-good">RSI14</span>：相對強弱指標，<span class="legend-bad">&lt;30 超賣</span>、30~70 正常、<span class="legend-warn">&gt;70 超買</span><br>
+    <span class="legend-good">MACD柱</span>：動能方向，<span class="legend-good">&gt;0 多方</span>、<span class="legend-bad">&lt;0 空方</span><br>
+    <span class="legend-good">K值</span>：KD指標，<span class="legend-bad">&lt;20 超賣</span>、<span class="legend-warn">&gt;80 超買</span>、<span class="legend-good">50↑ 偏多</span><br>
+    <strong>結論等級</strong>：<span class="legend-good">Lv5 強力推薦</span> → Lv4 推薦 → Lv3 觀望 → <span class="legend-warn">Lv2 偏弱</span> → <span class="legend-bad">Lv1 避開</span><br>
+    🟢 = 該面向正面 &nbsp; ⚪ = 該面向中性/負面（至少2個🟢才列入推薦）
+    </div>
+    """, unsafe_allow_html=True)
+
     if run_btn:
         st.session_state["scan_result"] = None  # 清除快取結果，強制重新掃描
         _run_scan.clear()

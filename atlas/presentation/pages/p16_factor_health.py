@@ -25,6 +25,15 @@ def _render_factor_section() -> None:
 
     st.caption("因子探勘需要歷史因子值和報酬資料。以下為模擬展示。")
 
+    st.markdown("""
+    <div class="legend-box">
+    <strong>指標說明</strong><br>
+    <span class="legend-good">IC均值</span>：因子與未來報酬的相關性，<span class="legend-good">≥0.03 有預測力</span>、<span class="legend-bad">&lt;0.03 無效</span><br>
+    <span class="legend-good">ICIR</span>：IC均值/IC標準差，衡量因子穩定性，<span class="legend-good">≥0.5 穩定有效</span>、<span class="legend-warn">0~0.5 不穩定</span>、<span class="legend-bad">&lt;0 反向</span><br>
+    ✅ = IC≥0.03 且 ICIR≥0.5（穩定有效因子）&nbsp; ❌ = 不符合條件
+    </div>
+    """, unsafe_allow_html=True)
+
     # 模擬因子資料（實際接入後替換為真實計算）
     import numpy as np
     engine = get_factor_mining_engine()
@@ -96,6 +105,16 @@ def _render_strategy_health() -> None:
     c = get_colors()
 
     engine = get_daily_backtest_engine()
+
+    st.markdown("""
+    <div class="legend-box">
+    <strong>指標說明</strong><br>
+    <span class="legend-good">健康分</span>：0~100 綜合評分，<span class="legend-good">≥60 健康</span>、<span class="legend-warn">40~60 需關注</span>、<span class="legend-bad">&lt;40 異常</span><br>
+    <span class="legend-good">勝率</span>：獲利交易佔比，<span class="legend-good">≥50% 正常</span>、<span class="legend-bad">&lt;40% 偏低</span><br>
+    <span class="legend-good">均報酬%</span>：每筆交易平均損益，<span class="legend-good">&gt;0 獲利</span>、<span class="legend-bad">&lt;0 虧損</span><br>
+    <span class="legend-good">權重調整</span>：系統建議的倉位調整係數，<span class="legend-good">&gt;1 可加碼</span>、<span class="legend-bad">&lt;1 應減碼</span>
+    </div>
+    """, unsafe_allow_html=True)
 
     # 模擬策略交易資料（實際接入後替換）
     import numpy as np

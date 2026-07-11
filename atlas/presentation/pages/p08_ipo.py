@@ -20,14 +20,57 @@ def render() -> None:
     st.title("🆕 IPO 申購")
     c = get_colors()
 
-    # ── 即將申購 ────────────────────────────────
-    st.subheader("即將公開申購")
-    st.info(
-        "IPO 申購資料需要市場資料訂閱服務（如 TEJ / CMoney API）。"
-        "目前尚未接入，請手動輸入申購候選名單。"
-    )
+    # ── 即將申購（自動抓取）──────────────────────
+    st.subheader("最近新上市/上櫃")
 
-    with st.expander("➕ 新增申購候選", expanded=False):
+    st.markdown("""
+    <div class="legend-box">
+    <strong>欄位說明</strong><br>
+    <span class="legend-good">價差%</span>：(現價 - 承銷價) / 承銷價，<span class="legend-good">&gt;20% 值得申購</span>、<span class="legend-warn">0~20% 小利</span>、<span class="legend-bad">&lt;0% 破發虧損</span><br>
+    <span class="legend-good">蜜月期</span>：上市後 30 天內通常有股價蜜月效應，<span class="legend-good">報酬% &gt;0 賺</span>、<span class="legend-bad">&lt;0 賠</span><br>
+    狀態：🟢 追蹤中（30天內）、🔴 蜜月結束（超過30天）
+    </div>
+    """, unsafe_allow_html=True)
+
+    @st.cache_data(ttl=3600, show_spinner="正在抓取最近 IPO 資料…")
+    def _fetch_recent_ipos() -> list[dict]:
+        """從 TWSE / TPEx 抓取最近新上市櫃資料。"""
+        from atlas.strategy.ipo_module import IPOModule
+        return IPOModule._fetch_upcoming_sync()
+
+    fetched_ipos = _fetch_recent_ipos()
+    if fetched_ipos:
+        ipo_rows = []
+        for item in fetched_ipos:
+            code = item.get("code", "")
+            name = item.get("name", "")
+            listing = item.get("listing_date", "—")
+            source = item.get("source", "")
+            source_label = "上市" if "twse" in source else "上櫃" if "tpex" in source else "—"
+            # 嘗試取得即時報價
+            try:
+                q = fetch_stock_quote(code)
+                price = q.get("price", 0)
+            except Exception:
+                price = 0
+            ipo_rows.append({
+                "代碼": code,
+                "名稱": name,
+                "上市日": listing,
+                "市場": source_label,
+                "現價": price if price else "—",
+                "備註": item.get("recommendation", ""),
+            })
+        st.dataframe(
+            pd.DataFrame(ipo_rows),
+            width="stretch",
+            hide_index=True,
+        )
+        st.caption(f"共 {len(fetched_ipos)} 筆，資料來源：TWSE / TPEx（每小時更新）")
+    else:
+        st.info("目前無法取得最近 IPO 資料（API 可能暫時無法連線），可使用下方手動新增。")
+
+    with st.expander("➕ 手動新增申購候選", expanded=False):
         with st.form("add_ipo_candidate"):
             col1, col2 = st.columns(2)
             with col1:

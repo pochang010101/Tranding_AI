@@ -100,10 +100,43 @@ def inject_css() -> None:
     .badge-bear {{ background: {c["negative"]}22; color: {c["negative"]}; }}
     .badge-range {{ background: {c["warning"]}22; color: {c["warning"]}; }}
 
-    /* 表格 hover */
+    /* 表格字體加大 + hover */
+    .stDataFrame td, .stDataFrame th,
+    [data-testid="stDataFrame"] td,
+    [data-testid="stDataFrame"] th {{
+        font-size: 15px !important;
+        padding: 8px 12px !important;
+    }}
+    [data-testid="stDataFrame"] [data-testid="StyledDataFrameDataCell"],
+    [data-testid="stDataFrame"] [role="gridcell"] {{
+        font-size: 15px !important;
+    }}
+    .stDataFrame thead th,
+    [data-testid="stDataFrame"] [role="columnheader"] {{
+        font-size: 14px !important;
+        font-weight: 700 !important;
+    }}
     .stDataFrame tbody tr:hover {{
         background: {c["bg_secondary"]} !important;
     }}
+
+    /* 圖例說明區塊 */
+    .legend-box {{
+        background: {c["bg_card"]};
+        border: 1px solid {c["border"]};
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin: 8px 0;
+        font-size: 13px;
+        color: {c["text_secondary"]};
+        line-height: 1.6;
+    }}
+    .legend-box strong {{
+        color: {c["text_primary"]};
+    }}
+    .legend-good {{ color: {c["positive"]}; font-weight: 600; }}
+    .legend-bad {{ color: {c["negative"]}; font-weight: 600; }}
+    .legend-warn {{ color: {c["warning"]}; font-weight: 600; }}
 
     /* 隱藏 Streamlit footer */
     footer {{ visibility: hidden; }}

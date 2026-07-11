@@ -122,6 +122,17 @@ def render() -> None:
     desc = _PHASE_DESCRIPTIONS.get(phase_result.phase.value, "")
     st.info(f"**{phase_label}階段** — {desc}")
 
+    st.markdown("""
+    <div class="legend-box">
+    <strong>指標說明</strong><br>
+    <span class="legend-good">主力階段</span>：<span class="legend-good">吸貨（買進機會）</span>→ <span style="color:#ff9800;font-weight:600">洗盤（觀望）</span>→ <span style="color:#2196f3;font-weight:600">拉抬（持有）</span>→ <span class="legend-bad">出貨（賣出警告）</span><br>
+    <span class="legend-good">量比</span>：近期成交量 vs 均量，<span class="legend-good">&gt;1.3 放量</span>、0.7~1.3 正常、<span class="legend-bad">&lt;0.7 縮量</span><br>
+    <span class="legend-good">法人連續</span>：三大法人連買/連賣天數，<span class="legend-good">+N 連續買超</span>、<span class="legend-bad">-N 連續賣超</span><br>
+    <span class="legend-good">葛蘭碧</span>：★ 越多代表技術面越多頭（滿分 5★），<span class="legend-good">≥3★ 偏多</span>、<span class="legend-bad">≤1★ 偏空</span><br>
+    <span class="legend-good">籌碼集中度</span>：0~100 儀表，<span class="legend-good">&gt;60 集中（主力控盤）</span>、<span class="legend-bad">&lt;40 分散</span>
+    </div>
+    """, unsafe_allow_html=True)
+
     if phase_result.signals:
         st.caption("偵測訊號：" + " | ".join(phase_result.signals))
 
