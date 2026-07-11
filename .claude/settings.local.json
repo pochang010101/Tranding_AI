@@ -46,7 +46,8 @@
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_conclusion_engine.py tests/unit/test_screener_engine.py -x -q --tb=short 2>&1)",
       "Bash(PYTHONPATH=. pytest tests/unit/test_price_levels.py -x -q --tb=short 2>&1)",
       "Bash(start:*)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(PYTHONPATH=. pytest tests/ -q --tb=short)"
     ]
   }
 }
