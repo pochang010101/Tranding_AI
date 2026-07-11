@@ -50,3 +50,6 @@ htmlcov/
 logs/
 models/*.pkl
 files.zip
+
+# Reference docs (local only)
+參考來源/
