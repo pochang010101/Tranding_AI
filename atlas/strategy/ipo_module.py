@@ -72,152 +72,102 @@ class IPOModule(IIPOModule):
 
     @staticmethod
     def _fetch_upcoming_sync() -> list[dict[str, Any]]:
-        """同步抓取公開申購資料（MOPS 公開申購 + TWSE 新上市 + TPEx）。"""
+        """同步抓取公開申購資料（Histock 為主，TWSE 新上市為輔）。
+
+        只回傳尚未截止的申購（申購迄日 >= 今天）。
+        """
         import httpx
+        from datetime import date as _date
         from io import StringIO
 
-        _HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        import pandas as pd
+
+        _HEADERS = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
         results: list[dict[str, Any]] = []
         seen_codes: set[str] = set()
+        today = _date.today()
 
-        # ── 1. MOPS 公開申購公告（含承銷價）──
+        # ── 1. Histock 公開申購（含申購期間、承銷價、市價、價差率）──
         try:
-            resp = httpx.post(
-                "https://mops.twse.com.tw/mops/web/ajax_t51sb10",
-                data={
-                    "encodeURIComponent": "1",
-                    "step": "1",
-                    "firstin": "1",
-                    "off": "1",
-                    "TYPEK": "all",
-                },
+            resp = httpx.get(
+                "https://histock.tw/stock/public.aspx",
                 headers=_HEADERS,
                 timeout=15,
+                verify=False,
             )
             if resp.status_code == 200:
-                import pandas as pd
-                try:
-                    tables = pd.read_html(StringIO(resp.text))
-                    for tbl in tables:
-                        if len(tbl) < 1 or len(tbl.columns) < 5:
-                            continue
-                        cols = [str(c) for c in tbl.columns]
-                        # 找含有「代號」和「承銷價」的表
-                        code_col = next((c for c in cols if "代號" in c or "代碼" in c), None)
-                        name_col = next((c for c in cols if "名稱" in c or "公司" in c), None)
-                        price_col = next((c for c in cols if "承銷價" in c or "認購價" in c), None)
-                        date_col = next((c for c in cols if "申購" in c and "起" in c), None)
-                        end_col = next((c for c in cols if "申購" in c and "迄" in c), None)
-
-                        if not code_col:
-                            continue
-
-                        for _, row in tbl.iterrows():
-                            try:
-                                code = str(row[code_col]).strip()
-                                if not code.isdigit() or len(code) != 4:
-                                    continue
-                                if code in seen_codes:
-                                    continue
-                                seen_codes.add(code)
-
-                                name = str(row[name_col]).strip() if name_col else ""
-                                sub_price = 0.0
-                                if price_col:
-                                    try:
-                                        sub_price = float(str(row[price_col]).replace(",", "").strip())
-                                    except (ValueError, TypeError):
-                                        pass
-                                start_date = str(row[date_col]).strip() if date_col else ""
-                                end_date = str(row[end_col]).strip() if end_col else ""
-
-                                results.append({
-                                    "code": code,
-                                    "name": name,
-                                    "listing_date": start_date,
-                                    "end_date": end_date,
-                                    "subscription_price": sub_price,
-                                    "market_ref_price": 0,
-                                    "spread_pct": 0.0,
-                                    "recommendation": _ipo_recommendation(sub_price),
-                                    "source": "mops",
-                                })
-                            except Exception:
+                text = resp.content.decode("utf-8", errors="replace")
+                tables = pd.read_html(StringIO(text))
+                if tables:
+                    tbl = tables[0]
+                    for _, row in tbl.iterrows():
+                        try:
+                            # [1] = "代碼\xa0名稱"
+                            cn = str(row.iloc[1]).replace(chr(160), " ").strip()
+                            parts = cn.split()
+                            code = parts[0] if parts else ""
+                            if not code.isdigit() or len(code) != 4:
                                 continue
-                except Exception as exc:
-                    logger.debug("MOPS table parse failed: %s", exc)
-        except Exception as exc:
-            logger.debug("MOPS fetch failed: %s", exc)
+                            if code in seen_codes:
+                                continue
+                            name = parts[1] if len(parts) > 1 else ""
 
-        # ── 2. TWSE 最近上市 ──
-        # 欄位對應：[0]代號 [1]名稱 [2]產業日期 [3]產業別 [4]股本
-        #           [9]上市買賣日 [10]承銷商 [11]承銷價 [12]備註
-        try:
-            url = "https://www.twse.com.tw/company/newlisting"
-            resp = httpx.get(url, params={"response": "json"}, timeout=15, headers=_HEADERS)
-            if resp.status_code == 200:
-                data = resp.json()
-                for row in data.get("data", [])[:30]:
-                    try:
-                        code = str(row[0]).strip()
-                        if not code.isdigit() or len(code) != 4:
-                            continue
-                        if code in seen_codes:
-                            continue
-                        seen_codes.add(code)
-                        name = str(row[1]).strip()
-                        # [9] = 上市買賣日（ROC格式 如 115.05.29）
-                        listing_date_str = _roc_to_ad(str(row[9]).strip()) if len(row) > 9 else ""
-                        # [11] = 承銷價
-                        sub_price = 0.0
-                        if len(row) > 11:
-                            try:
-                                sub_price = float(str(row[11]).replace(",", "").strip())
-                            except (ValueError, TypeError):
-                                pass
-                        results.append({
-                            "code": code,
-                            "name": name,
-                            "listing_date": listing_date_str,
-                            "subscription_price": sub_price,
-                            "market_ref_price": 0,
-                            "spread_pct": 0.0,
-                            "recommendation": _ipo_recommendation(sub_price),
-                            "source": "twse_newlisting",
-                        })
-                    except (IndexError, ValueError):
-                        continue
-        except Exception as exc:
-            logger.debug("TWSE newlisting fetch failed: %s", exc)
+                            # [3] = 申購期間 "MM/DD~MM/DD"
+                            sub_period = str(row.iloc[3]).strip()
+                            start_date_str = ""
+                            end_date_str = ""
+                            is_expired = True
+                            if "~" in sub_period:
+                                s_part, e_part = sub_period.split("~")
+                                start_date_str = f"{today.year}/{s_part.strip()}"
+                                end_date_str = f"{today.year}/{e_part.strip()}"
+                                try:
+                                    em, ed = e_part.strip().split("/")
+                                    end_dt = _date(today.year, int(em), int(ed))
+                                    is_expired = today > end_dt
+                                except (ValueError, IndexError):
+                                    pass
 
-        # ── 3. TPEx 新上櫃 ──
-        try:
-            url = "https://www.tpex.org.tw/web/regular_emerging/apply/latest/latest_result.php"
-            resp = httpx.get(url, params={"l": "zh-tw"}, timeout=15, headers=_HEADERS)
-            if resp.status_code == 200 and "application/json" in resp.headers.get("content-type", ""):
-                data = resp.json()
-                for item in data.get("reportList", [])[:5]:
-                    code = str(item.get("SecuritiesCompanyCode", ""))
-                    if code in seen_codes:
-                        continue
-                    seen_codes.add(code)
-                    sub_price = 0.0
-                    try:
-                        sub_price = float(str(item.get("SubscriptionPrice", 0)).replace(",", ""))
-                    except (ValueError, TypeError):
-                        pass
-                    results.append({
-                        "code": code,
-                        "name": str(item.get("CompanyName", "")),
-                        "listing_date": str(item.get("ListingDate", "")),
-                        "subscription_price": sub_price,
-                        "market_ref_price": 0,
-                        "spread_pct": 0.0,
-                        "recommendation": _ipo_recommendation(sub_price),
-                        "source": "tpex",
-                    })
+                            # 過濾已截止的申購
+                            if is_expired:
+                                continue
+
+                            seen_codes.add(code)
+
+                            # [6]=承銷價 [7]=市價 [9]=價差率%
+                            sub_price = float(row.iloc[6]) if pd.notna(row.iloc[6]) else 0.0
+                            market_price = float(row.iloc[7]) if pd.notna(row.iloc[7]) else 0.0
+                            spread_pct = float(row.iloc[9]) if pd.notna(row.iloc[9]) else 0.0
+
+                            # [0]=掛牌日
+                            listing_date_str = str(row.iloc[0]).strip()
+
+                            if spread_pct > 20:
+                                rec = "值得申購"
+                            elif spread_pct > 0:
+                                rec = "小利空間"
+                            else:
+                                rec = "已破發"
+
+                            results.append({
+                                "code": code,
+                                "name": name,
+                                "listing_date": listing_date_str,
+                                "start_date": start_date_str,
+                                "end_date": end_date_str,
+                                "subscription_price": sub_price,
+                                "market_ref_price": market_price,
+                                "spread_pct": spread_pct,
+                                "recommendation": rec,
+                                "source": "histock",
+                            })
+                        except Exception:
+                            continue
+                logger.info("Histock IPO: %d active subscriptions", len(results))
         except Exception as exc:
-            logger.debug("TPEx listing fetch failed: %s", exc)
+            logger.debug("Histock IPO fetch failed: %s", exc)
 
         return results
 

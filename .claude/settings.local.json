@@ -48,7 +48,8 @@
       "Bash(start:*)",
       "Bash(docker exec:*)",
       "Bash(PYTHONPATH=. pytest tests/ -q --tb=short)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c \"\nimport warnings; warnings.filterwarnings\\('ignore'\\)\nfrom atlas.strategy.ipo_module import IPOModule\n\nresults = IPOModule._fetch_upcoming_sync\\(\\)\nprint\\(f'Active subscriptions: {len\\(results\\)}'\\)\nfor r in results:\n    print\\(f'{r[\\\\\"code\\\\\"]} {r[\\\\\"name\\\\\"]} | sub={r[\\\\\"subscription_price\\\\\"]} | mkt={r[\\\\\"market_ref_price\\\\\"]} | spread={r[\\\\\"spread_pct\\\\\"]}% | {r[\\\\\"start_date\\\\\"]}~{r[\\\\\"end_date\\\\\"]} | {r[\\\\\"recommendation\\\\\"]}'\\)\n\" 2>&1)"
     ]
   }
 }
