@@ -181,10 +181,22 @@ def render() -> None:
         st.subheader("排程狀態")
         schedules = {
             "工作流": ["盤前 SOP", "盤中雷達", "盤後選股", "月度重建"],
-            "Cron": ["0 8 * * 1-5", "0 9 * * 1-5", "45 13 * * 1-5", "0 20 * * 0"],
+            "執行時間": [
+                "週一~五 08:00",
+                "週一~五 09:00",
+                "週一~五 13:45",
+                "每週日 20:00",
+            ],
+            "用途說明": [
+                "抓取隔夜國際行情→缺口預測→大盤環境→情緒評分",
+                "啟動盤中即時雷達，偵測 11 種訊號（突破/量增/法人等）",
+                "停雷達→更新收盤資料→全市場選股掃描→推送結果",
+                "重建股票池：重算 RS 排名、產業輪動、因子權重",
+            ],
             "狀態": ["⏳ 排程中", "⏳ 排程中", "⏳ 排程中", "⏳ 排程中"],
         }
-        st.dataframe(schedules, width="stretch", hide_index=True)
+        st.dataframe(schedules, use_container_width=True, hide_index=True)
+        st.caption("非交易日自動跳過（月度重建除外）")
 
     # Footer
     st.divider()
