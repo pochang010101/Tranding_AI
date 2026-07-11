@@ -15,6 +15,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _roc_to_ad(roc_str: str) -> str:
+    """將 ROC 日期（如 115.05.29）轉為西元日期字串（2026-05-29）。"""
+    try:
+        parts = roc_str.split(".")
+        if len(parts) == 3:
+            year = int(parts[0]) + 1911
+            return f"{year}-{parts[1]}-{parts[2]}"
+    except (ValueError, IndexError):
+        pass
+    return roc_str
+
+
 def _ipo_recommendation(sub_price: float) -> str:
     """根據承銷價產生建議文字。"""
     if sub_price <= 0:
@@ -138,24 +150,29 @@ class IPOModule(IIPOModule):
             logger.debug("MOPS fetch failed: %s", exc)
 
         # ── 2. TWSE 最近上市 ──
+        # 欄位對應：[0]代號 [1]名稱 [2]產業日期 [3]產業別 [4]股本
+        #           [9]上市買賣日 [10]承銷商 [11]承銷價 [12]備註
         try:
             url = "https://www.twse.com.tw/company/newlisting"
             resp = httpx.get(url, params={"response": "json"}, timeout=15, headers=_HEADERS)
             if resp.status_code == 200:
                 data = resp.json()
-                for row in data.get("data", [])[:10]:
+                for row in data.get("data", [])[:30]:
                     try:
                         code = str(row[0]).strip()
+                        if not code.isdigit() or len(code) != 4:
+                            continue
                         if code in seen_codes:
                             continue
                         seen_codes.add(code)
                         name = str(row[1]).strip()
-                        listing_date_str = str(row[2]).strip()
-                        # row[3] 有時含承銷價資訊
+                        # [9] = 上市買賣日（ROC格式 如 115.05.29）
+                        listing_date_str = _roc_to_ad(str(row[9]).strip()) if len(row) > 9 else ""
+                        # [11] = 承銷價
                         sub_price = 0.0
-                        if len(row) > 4:
+                        if len(row) > 11:
                             try:
-                                sub_price = float(str(row[4]).replace(",", "").strip())
+                                sub_price = float(str(row[11]).replace(",", "").strip())
                             except (ValueError, TypeError):
                                 pass
                         results.append({
