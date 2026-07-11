@@ -14,15 +14,18 @@ from atlas.presentation.components.theme import get_colors, metric_card
 logger = logging.getLogger(__name__)
 
 
-def _run_smart_scan() -> pd.DataFrame:
-    """執行全市場智慧掃描（快取 10 分鐘）。"""
+def _run_smart_scan() -> tuple[pd.DataFrame, str]:
+    """執行全市場智慧掃描（快取 10 分鐘）。回傳 (DataFrame, 資料日期字串)。"""
     from atlas.application.smart_screener import SmartScreener
 
     screener = SmartScreener(
         min_price=st.session_state.get("scr_min_price", 10.0),
         min_volume_lots=st.session_state.get("scr_min_vol", 500),
     )
-    return screener.scan_to_dataframe()
+    df = screener.scan_to_dataframe()
+    trading_date = screener.get_trading_date()
+    date_str = trading_date.strftime("%Y-%m-%d") if trading_date else "未知"
+    return df, date_str
 
 
 def render() -> None:
@@ -50,9 +53,9 @@ def render() -> None:
     # ── 控制列 ──
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        min_price = st.number_input("最低股價", value=10.0, step=5.0, key="scr_min_price")
+        min_price = st.number_input("最低股價", value=20.0, step=5.0, key="scr_min_price")
     with col2:
-        min_vol = st.number_input("最低成交量(張)", value=500, step=100, key="scr_min_vol")
+        min_vol = st.number_input("最低成交量(張)", value=1000, step=100, key="scr_min_vol")
     with col3:
         top_n = st.selectbox("顯示筆數", [20, 50, 100, 200], index=1)
 
@@ -83,8 +86,9 @@ def render() -> None:
     if run_btn or scan_result is None:
         with st.spinner("正在掃描全市場（TWSE + TPEx），約需 10~30 秒…"):
             try:
-                scan_result = _run_smart_scan()
+                scan_result, data_date = _run_smart_scan()
                 st.session_state["smart_scan_result"] = scan_result
+                st.session_state["smart_scan_date"] = data_date
                 # 同步取得熱門題材
                 try:
                     from atlas.infrastructure.twse_bulk import fetch_twse_daily_all
@@ -105,8 +109,13 @@ def render() -> None:
                 return
 
     if scan_result is None or scan_result.empty:
-        st.warning("掃描無結果。可能原因：非交易日、API 尚未更新、或篩選條件過嚴。")
+        st.warning("掃描無結果。可能原因：API 尚未更新或篩選條件過嚴。")
         return
+
+    # 顯示資料日期（非交易日會自動回退至最近交易日）
+    data_date = st.session_state.get("smart_scan_date", "")
+    if data_date:
+        st.info(f"📅 資料日期：**{data_date}**（非交易日自動取得最近交易日資料）")
 
     # ── 標籤 + 題材篩選 ──
     display_df = scan_result.copy()

@@ -213,6 +213,11 @@ class SmartScreener:
         logger.info("Smart screener: %d hits", len(results))
         return results
 
+    def get_trading_date(self) -> date | None:
+        """回傳最近一次掃描使用的交易日期。"""
+        from atlas.infrastructure.twse_bulk import last_trading_date
+        return last_trading_date
+
     def scan_to_dataframe(self, dt: date | None = None) -> pd.DataFrame:
         """掃描並回傳 DataFrame 格式（供 UI 使用）。"""
         hits = self.scan(dt)

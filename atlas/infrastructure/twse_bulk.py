@@ -38,36 +38,63 @@ def _find_trading_date(start: date, max_lookback: int = 7) -> date:
     return start
 
 
+# 模組層級變數，記錄最近一次成功取得資料的交易日期
+last_trading_date: date | None = None
+
+
 def fetch_twse_daily_all(dt: date | None = None) -> pd.DataFrame:
     """取得 TWSE 全市場當日收盤行情。
+
+    非交易日（假日/週末）自動往前回退，最多 7 天。
 
     Returns DataFrame with columns:
         code, name, volume(股), open, high, low, close, change, trade_count
     """
-    dt = dt or _find_trading_date(date.today())
-    date_str = dt.strftime("%Y%m%d")
+    global last_trading_date
+    start_dt = dt or _find_trading_date(date.today())
+    max_retries = 1 if dt else 7  # 指定日期只試一次，自動模式往前找 7 天
 
-    try:
-        resp = httpx.get(
-            "https://www.twse.com.tw/exchangeReport/MI_INDEX",
-            params={"response": "json", "date": date_str, "type": "ALLBUT0999"},
-            timeout=_TIMEOUT,
-            headers=_HEADERS,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as exc:
-        logger.warning("TWSE MI_INDEX fetch failed: %s", exc)
+    for attempt in range(max_retries):
+        candidate = start_dt - timedelta(days=attempt)
+        if candidate.weekday() >= 5:
+            continue
+        date_str = candidate.strftime("%Y%m%d")
+
+        try:
+            resp = httpx.get(
+                "https://www.twse.com.tw/exchangeReport/MI_INDEX",
+                params={"response": "json", "date": date_str, "type": "ALLBUT0999"},
+                timeout=_TIMEOUT,
+                headers=_HEADERS,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as exc:
+            logger.warning("TWSE MI_INDEX fetch failed for %s: %s", date_str, exc)
+            continue
+
+        if data.get("stat") != "OK":
+            logger.info("TWSE MI_INDEX stat=%s for %s, trying previous day", data.get("stat"), date_str)
+            continue
+
+        last_trading_date = candidate
+        logger.info("TWSE daily: using trading date %s", candidate)
+        break
+    else:
+        logger.warning("TWSE MI_INDEX: no valid trading date found within lookback")
         return pd.DataFrame()
 
-    if data.get("stat") != "OK":
-        logger.warning("TWSE MI_INDEX stat=%s for %s", data.get("stat"), date_str)
-        return pd.DataFrame()
-
-    # data9 contains stock data (index 9 or key "data9")
+    # data9 (舊版) 或 tables[8].data (新版 2025+)
     rows_data = data.get("data9") or data.get("data") or []
     if not rows_data:
-        # Try alternative keys
+        # 新版 API：個股行情在 tables 陣列中資料量最大的那張表
+        tables = data.get("tables") or []
+        for tbl in tables:
+            if isinstance(tbl, dict) and len(tbl.get("data", [])) > 100:
+                rows_data = tbl["data"]
+                break
+    if not rows_data:
+        # Fallback: 搜尋 data* 開頭的 key
         for key in data:
             if key.startswith("data") and isinstance(data[key], list) and len(data[key]) > 100:
                 rows_data = data[key]
@@ -89,7 +116,8 @@ def fetch_twse_daily_all(dt: date | None = None) -> pd.DataFrame:
             close = _safe_num(row[8])
             change_sign = str(row[9]).strip()
             change_val = _safe_num(row[10])
-            if "-" in change_sign or "▼" in change_sign:
+            # 漲跌符號：舊版用 "-"/"▼"，新版用 HTML <p style= color:green>-</p>
+            if "-" in change_sign or "▼" in change_sign or "green" in change_sign:
                 change_val = -abs(change_val)
 
             if close <= 0:
@@ -125,7 +153,8 @@ def fetch_twse_institutional(dt: date | None = None) -> pd.DataFrame:
         trust_buy, trust_sell, trust_net,
         dealer_buy, dealer_sell, dealer_net, total_net
     """
-    dt = dt or _find_trading_date(date.today())
+    # 使用 last_trading_date 確保與行情資料同一天
+    dt = dt or last_trading_date or _find_trading_date(date.today())
     date_str = dt.strftime("%Y%m%d")
 
     try:
@@ -145,22 +174,38 @@ def fetch_twse_institutional(dt: date | None = None) -> pd.DataFrame:
         return pd.DataFrame()
 
     records = []
+    # 新版 T86 (19欄): [0]代號 [1]名稱
+    #   [2-4]外資(不含自營商) [5-7]外資自營商
+    #   [8-10]投信 [11]自營商合計淨 [12-14]自營商(自行) [15-17]自營商(避險) [18]三大法人合計
+    has_new_format = len(data.get("data", [[]])[0]) >= 19 if data.get("data") else False
     for row in data.get("data", []):
         try:
             code = str(row[0]).strip()
             if not code.isdigit() or len(code) != 4:
                 continue
             name = str(row[1]).strip()
-            foreign_buy = _safe_int(row[2])
-            foreign_sell = _safe_int(row[3])
-            foreign_net = _safe_int(row[4])
-            trust_buy = _safe_int(row[5])
-            trust_sell = _safe_int(row[6])
-            trust_net = _safe_int(row[7])
-            dealer_buy = _safe_int(row[8])
-            dealer_sell = _safe_int(row[9])
-            dealer_net = _safe_int(row[10])
-            total_net = foreign_net + trust_net + dealer_net
+            if has_new_format:
+                foreign_buy = _safe_int(row[2])
+                foreign_sell = _safe_int(row[3])
+                foreign_net = _safe_int(row[4]) + _safe_int(row[7])  # 外資+外資自營商
+                trust_buy = _safe_int(row[8])
+                trust_sell = _safe_int(row[9])
+                trust_net = _safe_int(row[10])
+                dealer_buy = 0
+                dealer_sell = 0
+                dealer_net = _safe_int(row[11])
+                total_net = _safe_int(row[18])
+            else:
+                foreign_buy = _safe_int(row[2])
+                foreign_sell = _safe_int(row[3])
+                foreign_net = _safe_int(row[4])
+                trust_buy = _safe_int(row[5])
+                trust_sell = _safe_int(row[6])
+                trust_net = _safe_int(row[7])
+                dealer_buy = _safe_int(row[8])
+                dealer_sell = _safe_int(row[9])
+                dealer_net = _safe_int(row[10])
+                total_net = foreign_net + trust_net + dealer_net
 
             records.append({
                 "code": code,
@@ -209,7 +254,7 @@ def fetch_disposition_list() -> set[str]:
 
 def fetch_tpex_daily_all(dt: date | None = None) -> pd.DataFrame:
     """取得 TPEx (上櫃) 全市場當日收盤行情。"""
-    dt = dt or _find_trading_date(date.today())
+    dt = dt or last_trading_date or _find_trading_date(date.today())
     # TPEx uses ROC year
     roc_year = dt.year - 1911
     date_str = f"{roc_year}/{dt.month:02d}/{dt.day:02d}"
@@ -220,6 +265,7 @@ def fetch_tpex_daily_all(dt: date | None = None) -> pd.DataFrame:
             params={"l": "zh-tw", "d": date_str, "se": "EW"},
             timeout=_TIMEOUT,
             headers=_HEADERS,
+            verify=False,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -227,8 +273,16 @@ def fetch_tpex_daily_all(dt: date | None = None) -> pd.DataFrame:
         logger.warning("TPEx daily fetch failed: %s", exc)
         return pd.DataFrame()
 
+    # aaData (舊版) 或 tables[0].data (新版 2025+)
+    rows_data = data.get("aaData") or []
+    if not rows_data:
+        for tbl in data.get("tables", []):
+            if isinstance(tbl, dict) and len(tbl.get("data", [])) > 100:
+                rows_data = tbl["data"]
+                break
+
     records = []
-    for row in data.get("aaData", []):
+    for row in rows_data:
         try:
             code = str(row[0]).strip()
             if not code.isdigit() or len(code) != 4:
@@ -268,7 +322,7 @@ def fetch_tpex_daily_all(dt: date | None = None) -> pd.DataFrame:
 
 def fetch_tpex_institutional(dt: date | None = None) -> pd.DataFrame:
     """取得 TPEx 三大法人全市場買賣超。"""
-    dt = dt or _find_trading_date(date.today())
+    dt = dt or last_trading_date or _find_trading_date(date.today())
     roc_year = dt.year - 1911
     date_str = f"{roc_year}/{dt.month:02d}/{dt.day:02d}"
 
@@ -278,6 +332,7 @@ def fetch_tpex_institutional(dt: date | None = None) -> pd.DataFrame:
             params={"l": "zh-tw", "d": date_str, "se": "EW", "t": "D"},
             timeout=_TIMEOUT,
             headers=_HEADERS,
+            verify=False,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -285,22 +340,45 @@ def fetch_tpex_institutional(dt: date | None = None) -> pd.DataFrame:
         logger.warning("TPEx institutional fetch failed: %s", exc)
         return pd.DataFrame()
 
+    # aaData (舊版) 或 tables[0].data (新版 2025+)
+    rows_data = data.get("aaData") or []
+    if not rows_data:
+        for tbl in data.get("tables", []):
+            if isinstance(tbl, dict) and len(tbl.get("data", [])) > 100:
+                rows_data = tbl["data"]
+                break
+
     records = []
-    for row in data.get("aaData", []):
+    # 新版 (24欄): [0]代號 [1]名稱
+    #   [2-4]外資(不含自營商) [5-7]外資自營商 [8-10]外資合計
+    #   [11-13]投信 [14-16]自營商(自行) [17-19]自營商(避險) [20-22]自營商合計 [23]三大法人合計
+    has_new_format = len(rows_data[0]) >= 24 if rows_data else False
+    for row in rows_data:
         try:
             code = str(row[0]).strip()
             if not code.isdigit() or len(code) != 4:
                 continue
             name = str(row[1]).strip()
-            foreign_buy = _safe_int(row[2])
-            foreign_sell = _safe_int(row[3])
-            foreign_net = _safe_int(row[4])
-            trust_buy = _safe_int(row[5])
-            trust_sell = _safe_int(row[6])
-            trust_net = _safe_int(row[7])
-            dealer_buy = _safe_int(row[8])
-            dealer_sell = _safe_int(row[9])
-            dealer_net = _safe_int(row[10])
+            if has_new_format:
+                foreign_buy = _safe_int(row[8])
+                foreign_sell = _safe_int(row[9])
+                foreign_net = _safe_int(row[10])   # 外資合計
+                trust_buy = _safe_int(row[11])
+                trust_sell = _safe_int(row[12])
+                trust_net = _safe_int(row[13])
+                dealer_buy = _safe_int(row[20])
+                dealer_sell = _safe_int(row[21])
+                dealer_net = _safe_int(row[22])    # 自營商合計
+            else:
+                foreign_buy = _safe_int(row[2])
+                foreign_sell = _safe_int(row[3])
+                foreign_net = _safe_int(row[4])
+                trust_buy = _safe_int(row[5])
+                trust_sell = _safe_int(row[6])
+                trust_net = _safe_int(row[7])
+                dealer_buy = _safe_int(row[8])
+                dealer_sell = _safe_int(row[9])
+                dealer_net = _safe_int(row[10])
 
             records.append({
                 "code": code,
