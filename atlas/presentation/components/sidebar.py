@@ -63,11 +63,22 @@ def render_sidebar() -> str:
         min-height: 40px !important;
     }
     .nav-container {
-        background: rgba(30,30,30,0.6);
+        background: rgba(14,17,23,0.95);
+        backdrop-filter: blur(10px);
         border-radius: 12px;
         padding: 8px 10px;
         margin-bottom: 16px;
         border: 1px solid rgba(255,255,255,0.08);
+        position: sticky;
+        top: 0;
+        z-index: 999;
+    }
+    /* Make Streamlit main container support sticky */
+    [data-testid="stAppViewBlockContainer"] {
+        overflow: visible !important;
+    }
+    header[data-testid="stHeader"] {
+        z-index: 998 !important;
     }
     </style>
     """, unsafe_allow_html=True)
