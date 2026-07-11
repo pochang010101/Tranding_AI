@@ -48,7 +48,7 @@ class ConclusionEngine(IConclusionEngine):
 
     def __init__(
         self,
-        scoring_engine: ScoringEngine,
+        scoring_engine: ScoringEngine | None = None,
         regime_service: MarketRegimeService | None = None,
         sentiment_service: SentimentService | None = None,
     ) -> None:

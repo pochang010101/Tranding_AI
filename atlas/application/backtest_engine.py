@@ -39,9 +39,9 @@ class BacktestEngine(IBacktestEngine):
 
     def __init__(
         self,
-        data_manager: DataManager,
-        strategy_lib: StrategyLibrary,
-        indicator_lib: IndicatorLibrary,
+        data_manager: DataManager | None = None,
+        strategy_lib: StrategyLibrary | None = None,
+        indicator_lib: IndicatorLibrary | None = None,
     ) -> None:
         self._dm = data_manager
         self._strat_lib = strategy_lib

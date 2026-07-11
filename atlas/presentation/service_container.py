@@ -23,9 +23,51 @@ def get_indicator_lib():
 
 
 @st.cache_resource
+def get_pattern_signal_engine():
+    from atlas.strategy.pattern_signals import PatternSignalEngine
+    return PatternSignalEngine()
+
+
+@st.cache_resource
+def get_smart_money_detector():
+    from atlas.strategy.smart_money_phase import SmartMoneyDetector
+    return SmartMoneyDetector()
+
+
+@st.cache_resource
+def get_fx_factor_engine():
+    from atlas.domain.fx_factor import FxFactorEngine
+    return FxFactorEngine()
+
+
+@st.cache_resource
+def get_price_level_calc():
+    from atlas.strategy.price_levels import PriceLevelCalculator
+    return PriceLevelCalculator()
+
+
+@st.cache_resource
+def get_factor_mining_engine():
+    from atlas.strategy.factor_mining import FactorMiningEngine
+    return FactorMiningEngine()
+
+
+@st.cache_resource
+def get_daily_backtest_engine():
+    from atlas.application.daily_backtest import DailyBacktestEngine
+    return DailyBacktestEngine()
+
+
+@st.cache_resource
 def get_scoring_engine():
     from atlas.strategy.scoring_engine import ScoringEngine
-    return ScoringEngine()
+    return ScoringEngine(
+        data_manager=None,
+        indicator_lib=get_indicator_lib(),
+        pattern_engine=get_pattern_signal_engine(),
+        smart_money=get_smart_money_detector(),
+        fx_factor=get_fx_factor_engine(),
+    )
 
 
 @st.cache_resource
@@ -43,13 +85,17 @@ def get_monte_carlo():
 @st.cache_resource
 def get_conclusion_engine():
     from atlas.application.conclusion_engine import ConclusionEngine
-    return ConclusionEngine()
+    return ConclusionEngine(scoring_engine=get_scoring_engine())
 
 
 @st.cache_resource
 def get_backtest_engine():
     from atlas.application.backtest_engine import BacktestEngine
-    return BacktestEngine()
+    return BacktestEngine(
+        data_manager=None,
+        strategy_lib=None,
+        indicator_lib=get_indicator_lib(),
+    )
 
 
 @st.cache_resource

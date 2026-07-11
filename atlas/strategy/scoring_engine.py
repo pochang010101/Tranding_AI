@@ -12,10 +12,13 @@ from atlas.models.scoring import AspectResult, AxisScore
 
 if TYPE_CHECKING:
     from atlas.domain.fund_flow import FundFlowService
+    from atlas.domain.fx_factor import FxFactorEngine
     from atlas.domain.industry_analyzer import IndustryAnalyzer
     from atlas.infrastructure.cache import CacheManager
     from atlas.infrastructure.data_manager import DataManager
     from atlas.strategy.indicator_lib import IndicatorLibrary
+    from atlas.strategy.pattern_signals import PatternSignalEngine
+    from atlas.strategy.smart_money_phase import SmartMoneyDetector
 
 logger = logging.getLogger(__name__)
 
@@ -39,17 +42,23 @@ class ScoringEngine(IScoringEngine):
 
     def __init__(
         self,
-        data_manager: DataManager,
-        indicator_lib: IndicatorLibrary,
+        data_manager: DataManager | None = None,
+        indicator_lib: IndicatorLibrary | None = None,
         fund_flow: FundFlowService | None = None,
         industry_analyzer: IndustryAnalyzer | None = None,
         cache: CacheManager | None = None,
+        pattern_engine: PatternSignalEngine | None = None,
+        smart_money: SmartMoneyDetector | None = None,
+        fx_factor: FxFactorEngine | None = None,
     ) -> None:
         self._dm = data_manager
         self._ind = indicator_lib
         self._fund_flow = fund_flow
         self._industry = industry_analyzer
         self._cache = cache
+        self._pattern = pattern_engine
+        self._smart_money = smart_money
+        self._fx_factor = fx_factor
         self._weights: tuple[float, float, float, float] = (0.25, 0.25, 0.25, 0.25)
 
     async def score_axis(self, code: str, market: MarketType) -> AxisScore:
@@ -219,6 +228,29 @@ class ScoringEngine(IScoringEngine):
             else:
                 score -= 1
 
+        # Phase 11 B1+B2：整合多流派訊號（葛蘭碧+N底+均線排列）
+        if self._pattern:
+            try:
+                pattern = self._pattern.analyze(df)
+                detail["granville_stars"] = float(pattern.granville_stars)
+                detail["ma_alignment_score"] = pattern.ma_alignment_score
+                detail["pattern_composite"] = pattern.composite_score
+                if pattern.n_bottom_detected:
+                    detail["n_bottom"] = 1.0
+                    score += 1
+                # 葛蘭碧 3 星以上加分
+                if pattern.granville_stars >= 3:
+                    score += 1
+                elif pattern.granville_stars == 0:
+                    score -= 1
+                # 均線排列加分
+                if pattern.ma_alignment == "bullish":
+                    score += 1
+                elif pattern.ma_alignment == "bearish":
+                    score -= 1
+            except Exception as exc:
+                logger.debug("Pattern analysis error: %s", exc)
+
         if score >= 2:
             verdict = AspectVerdict.POSITIVE
         elif score <= -2:
@@ -269,6 +301,32 @@ class ScoringEngine(IScoringEngine):
                 verdict = AspectVerdict.NEGATIVE
             else:
                 verdict = AspectVerdict.NEUTRAL
+
+            # Phase 12 A5：主力階段偵測加強籌碼面判定
+            if self._smart_money:
+                try:
+                    import pandas as pd
+                    from atlas.strategy.smart_money_phase import SmartMoneyPhase
+                    end = date.today()
+                    start = end - timedelta(days=60)
+                    bars = await self._dm.fetch_daily_bars(code, market, start, end)
+                    if len(bars) >= 25:
+                        df = pd.DataFrame([
+                            {"open": float(b.open), "high": float(b.high),
+                             "low": float(b.low), "close": float(b.close),
+                             "volume": b.volume}
+                            for b in bars
+                        ])
+                        inst_series = pd.Series([float(consec.get("foreign", 0))] * len(df))
+                        phase_result = self._smart_money.detect(df, inst_series, code)
+                        detail["smart_money_phase"] = phase_result.phase.value
+                        detail["phase_confidence"] = phase_result.confidence
+                        if phase_result.phase == SmartMoneyPhase.MARKUP:
+                            verdict = AspectVerdict.POSITIVE
+                        elif phase_result.phase == SmartMoneyPhase.DISTRIBUTION:
+                            verdict = AspectVerdict.NEGATIVE
+                except Exception as exc:
+                    logger.debug("SmartMoney detection error for %s: %s", code, exc)
         except Exception:
             verdict = AspectVerdict.NEUTRAL
 
