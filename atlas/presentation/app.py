@@ -23,7 +23,7 @@ def main() -> None:
         page_title="Atlas v5.0 — 量化交易決策系統",
         page_icon="🏛️",
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed",
     )
 
     _init_session()
