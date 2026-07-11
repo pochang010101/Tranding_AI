@@ -8,8 +8,10 @@ from datetime import date, datetime
 from atlas.enums import (
     AspectVerdict,
     ConclusionLevel,
+    ConflictFlag,
     ConfidenceLevel,
     MarketType,
+    SignalStrength,
 )
 
 
@@ -128,10 +130,14 @@ class ConclusionResult:
         code: 股票代碼
         market: 市場類型
         raw_level: 原始結論等級（未降級）
-        final_level: 最終結論等級（經三層降級）
+        final_level: 最終結論等級（經三層降級 + 衝突降級）
+        signal_strength: 訊號強度（方向閘門 × 動能分級）
+        conflict_flags: 衝突標記列表（任一觸發 → 額外降一級）
+        downgrade_sources: 降級原因追溯列表（如 "大盤空頭-1", "衝突:逆勢-1"）
         regime_downgrade: 大盤降級幅度（0 或 -1）
         sentiment_downgrade: 情緒降級幅度（0 或 -1）
         industry_downgrade: 產業勝率降級幅度（0 或 -1）
+        conflict_downgrade: 衝突降級幅度（0 或 -1）
         scoring_detail: 各項評分明細
         timestamp: 計算時間
     """
@@ -140,8 +146,12 @@ class ConclusionResult:
     market: MarketType
     raw_level: ConclusionLevel
     final_level: ConclusionLevel
+    signal_strength: SignalStrength = SignalStrength.NEUTRAL
+    conflict_flags: tuple[ConflictFlag, ...] = ()
+    downgrade_sources: tuple[str, ...] = ()
     regime_downgrade: int = 0
     sentiment_downgrade: int = 0
     industry_downgrade: int = 0
+    conflict_downgrade: int = 0
     scoring_detail: dict[str, float] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.utcnow)

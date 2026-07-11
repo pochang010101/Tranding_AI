@@ -13,6 +13,7 @@ from atlas.interfaces.application import IScreenerEngine
 from atlas.models.scoring import ScanResult
 
 if TYPE_CHECKING:
+    from atlas.application.conclusion_engine import ConclusionEngine
     from atlas.domain.universe import UniverseManager
     from atlas.strategy.ml_engine import MLEngine
     from atlas.strategy.scoring_engine import ScoringEngine
@@ -30,11 +31,13 @@ class ScreenerEngine(IScreenerEngine):
     def __init__(
         self,
         scoring_engine: ScoringEngine,
+        conclusion_engine: ConclusionEngine | None = None,
         universe_manager: UniverseManager | None = None,
         ml_engine: MLEngine | None = None,
         smc_module: SMCModule | None = None,
     ) -> None:
         self._scoring = scoring_engine
+        self._conclusion = conclusion_engine
         self._universe = universe_manager
         self._ml = ml_engine
         self._smc = smc_module
@@ -63,21 +66,31 @@ class ScreenerEngine(IScreenerEngine):
         scored = await self._scoring.score_batch(codes, market)
         results: list[ScanResult] = []
 
+        # 批次結論評估（統一走 conclusion_engine，消滅雙軌結論 M2/M6）
+        conclusion_map: dict[str, tuple[ConclusionLevel, ConclusionLevel, list[str]]] = {}
+        if self._conclusion:
+            for axis, _aspect in scored:
+                try:
+                    cr = await self._conclusion.evaluate(axis.code, market)
+                    conclusion_map[axis.code] = (
+                        cr.final_level,
+                        cr.raw_level,
+                        list(cr.downgrade_sources),
+                    )
+                except Exception as exc:
+                    logger.warning("Conclusion eval failed for %s: %s", axis.code, exc)
+
         for axis, aspect in scored:
-            # 計算結論等級（簡化：依總分映射）
-            total = axis.total_score
-            if total >= 80 and aspect.is_qualified:
-                conclusion = ConclusionLevel.LV5
-            elif total >= 70 and aspect.is_qualified:
-                conclusion = ConclusionLevel.LV4
-            elif total >= 60 and aspect.is_qualified:
-                conclusion = ConclusionLevel.LV3
-            elif total >= 50:
-                conclusion = ConclusionLevel.LV2
-            elif total >= 40:
-                conclusion = ConclusionLevel.LV1
+            if axis.code in conclusion_map:
+                conclusion, original, dg_reasons = conclusion_map[axis.code]
             else:
-                conclusion = ConclusionLevel.LV0
+                # Fallback：無 conclusion_engine 時用靜態映射（向下相容）
+                from atlas.application.conclusion_engine import ConclusionEngine
+                conclusion = ConclusionEngine._map_raw_level(
+                    axis.total_score, aspect.is_qualified
+                )
+                original = conclusion
+                dg_reasons = []
 
             results.append(ScanResult(
                 code=axis.code,
@@ -86,7 +99,8 @@ class ScreenerEngine(IScreenerEngine):
                 axis_score=axis,
                 aspect=aspect,
                 conclusion=conclusion,
-                original_conclusion=conclusion,
+                original_conclusion=original,
+                downgrade_reasons=dg_reasons,
                 scan_date=scan_date,
             ))
 
@@ -104,6 +118,10 @@ class ScreenerEngine(IScreenerEngine):
                 aspect=r.aspect,
                 conclusion=r.conclusion,
                 original_conclusion=r.original_conclusion,
+                downgrade_reasons=r.downgrade_reasons,
+                auxiliary_confidence=r.auxiliary_confidence,
+                ml_prediction=r.ml_prediction,
+                smc_confirmed=r.smc_confirmed,
                 rank=i,
                 scan_date=scan_date,
             ))

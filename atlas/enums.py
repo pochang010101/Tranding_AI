@@ -128,6 +128,37 @@ class DataSourceHealth(StrEnum):
     UNHEALTHY = "UNHEALTHY"  # 不健康（已 Fallback）
 
 
+class SignalStrength(IntEnum):
+    """訊號強度七級（FR-SEL-05）。
+
+    由 L1(年線方向) × L2(季線方向) 組合決定「方向閘門」，
+    再以 total_score 區間決定「動能分級」。
+    解決 M1 矛盾：評分與訊號強度脫鉤。
+    """
+
+    STRONG_BUY = 3    # 多頭區 + 高動能
+    BUY = 2           # 多頭區 + 中動能
+    WEAK_BUY = 1      # 中性區偏多 或 多頭區低動能
+    NEUTRAL = 0       # 中性
+    WEAK_SELL = -1    # 中性區偏空 或 空頭區低動能
+    SELL = -2         # 空頭區 + 中動能
+    STRONG_SELL = -3  # 空頭區 + 高動能
+
+
+class ConflictFlag(StrEnum):
+    """衝突標記（FR-SEL-06）。
+
+    當多個訊號層互相矛盾時自動標記，
+    任一旗標觸發 → 結論自動降一級。
+    解決 M3/M8 矛盾：衝突無仲裁。
+    """
+
+    COUNTER_TREND = "COUNTER_TREND"       # 短多長空（如飆股★強買但年線空頭）
+    SIGNAL_CLASH = "SIGNAL_CLASH"         # 流派互斥（主流派看空但飆股看多）
+    VOLUME_DIVERGE = "VOLUME_DIVERGE"     # 量價背離（葛蘭碧 BUY + 量價下跌）
+    ASPECT_CONFLICT = "ASPECT_CONFLICT"   # 面向衝突（技術正面但籌碼負面且強度大）
+
+
 class ConfidenceLevel(StrEnum):
     """輔助信心度（FR-SEL-04）。"""
 

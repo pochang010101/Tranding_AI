@@ -42,7 +42,8 @@
       "Bash(cmd.exe /c \"docker ps\")",
       "Bash(echo \"EXIT: $?\")",
       "Bash(wsl:*)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(PYTHONPATH=. python -m pytest tests/unit/test_conclusion_engine.py tests/unit/test_screener_engine.py -x -q --tb=short 2>&1)"
     ]
   }
 }
