@@ -73,3 +73,32 @@ class DetectorAlert:
     detail: str
     related_codes: list[str] = field(default_factory=list)
     timestamp: datetime = field(default_factory=datetime.utcnow)
+
+
+@dataclass(frozen=True)
+class PriceLevelResult:
+    """交易價位計算結果（支撐壓力 + Fibonacci + 買點建議）。
+
+    Attributes:
+        code: 股票代碼
+        current_price: 當前價格
+        supports: 支撐價位列表（由近到遠）
+        resistances: 壓力價位列表（由近到遠）
+        fibonacci: Fibonacci 回撤價位 {比例: 價位}
+        pullback_buy: 拉回買點（最近支撐上方）
+        breakout_buy: 突破買點（最近壓力上方）
+        stop_loss: 建議停損價
+        risk_reward_ratio: 風報比（目標報酬 / 停損風險）
+        atr: ATR 值（用於動態停損）
+    """
+
+    code: str
+    current_price: float
+    supports: tuple[float, ...] = ()
+    resistances: tuple[float, ...] = ()
+    fibonacci: dict[str, float] = field(default_factory=dict)
+    pullback_buy: float | None = None
+    breakout_buy: float | None = None
+    stop_loss: float | None = None
+    risk_reward_ratio: float | None = None
+    atr: float | None = None
