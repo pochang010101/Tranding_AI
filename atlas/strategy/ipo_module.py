@@ -15,6 +15,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _ipo_recommendation(sub_price: float) -> str:
+    """根據承銷價產生建議文字。"""
+    if sub_price <= 0:
+        return "待查承銷價"
+    return "已有承銷價"
+
+
 class IPOModule(IIPOModule):
     """IPO 分析模組。
 
@@ -53,32 +60,112 @@ class IPOModule(IIPOModule):
 
     @staticmethod
     def _fetch_upcoming_sync() -> list[dict[str, Any]]:
-        """同步抓取公開申購資料（MOPS + TWSE 新上市櫃）。"""
+        """同步抓取公開申購資料（MOPS 公開申購 + TWSE 新上市 + TPEx）。"""
         import httpx
-        import re
+        from io import StringIO
 
+        _HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         results: list[dict[str, Any]] = []
+        seen_codes: set[str] = set()
 
+        # ── 1. MOPS 公開申購公告（含承銷價）──
         try:
-            # TWSE 最近上市審議通過 (isin list)
+            resp = httpx.post(
+                "https://mops.twse.com.tw/mops/web/ajax_t51sb10",
+                data={
+                    "encodeURIComponent": "1",
+                    "step": "1",
+                    "firstin": "1",
+                    "off": "1",
+                    "TYPEK": "all",
+                },
+                headers=_HEADERS,
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                import pandas as pd
+                try:
+                    tables = pd.read_html(StringIO(resp.text))
+                    for tbl in tables:
+                        if len(tbl) < 1 or len(tbl.columns) < 5:
+                            continue
+                        cols = [str(c) for c in tbl.columns]
+                        # 找含有「代號」和「承銷價」的表
+                        code_col = next((c for c in cols if "代號" in c or "代碼" in c), None)
+                        name_col = next((c for c in cols if "名稱" in c or "公司" in c), None)
+                        price_col = next((c for c in cols if "承銷價" in c or "認購價" in c), None)
+                        date_col = next((c for c in cols if "申購" in c and "起" in c), None)
+                        end_col = next((c for c in cols if "申購" in c and "迄" in c), None)
+
+                        if not code_col:
+                            continue
+
+                        for _, row in tbl.iterrows():
+                            try:
+                                code = str(row[code_col]).strip()
+                                if not code.isdigit() or len(code) != 4:
+                                    continue
+                                if code in seen_codes:
+                                    continue
+                                seen_codes.add(code)
+
+                                name = str(row[name_col]).strip() if name_col else ""
+                                sub_price = 0.0
+                                if price_col:
+                                    try:
+                                        sub_price = float(str(row[price_col]).replace(",", "").strip())
+                                    except (ValueError, TypeError):
+                                        pass
+                                start_date = str(row[date_col]).strip() if date_col else ""
+                                end_date = str(row[end_col]).strip() if end_col else ""
+
+                                results.append({
+                                    "code": code,
+                                    "name": name,
+                                    "listing_date": start_date,
+                                    "end_date": end_date,
+                                    "subscription_price": sub_price,
+                                    "market_ref_price": 0,
+                                    "spread_pct": 0.0,
+                                    "recommendation": _ipo_recommendation(sub_price),
+                                    "source": "mops",
+                                })
+                            except Exception:
+                                continue
+                except Exception as exc:
+                    logger.debug("MOPS table parse failed: %s", exc)
+        except Exception as exc:
+            logger.debug("MOPS fetch failed: %s", exc)
+
+        # ── 2. TWSE 最近上市 ──
+        try:
             url = "https://www.twse.com.tw/company/newlisting"
-            resp = httpx.get(url, params={"response": "json"}, timeout=15,
-                           headers={"User-Agent": "Mozilla/5.0"})
+            resp = httpx.get(url, params={"response": "json"}, timeout=15, headers=_HEADERS)
             if resp.status_code == 200:
                 data = resp.json()
                 for row in data.get("data", [])[:10]:
                     try:
                         code = str(row[0]).strip()
+                        if code in seen_codes:
+                            continue
+                        seen_codes.add(code)
                         name = str(row[1]).strip()
                         listing_date_str = str(row[2]).strip()
+                        # row[3] 有時含承銷價資訊
+                        sub_price = 0.0
+                        if len(row) > 4:
+                            try:
+                                sub_price = float(str(row[4]).replace(",", "").strip())
+                            except (ValueError, TypeError):
+                                pass
                         results.append({
                             "code": code,
                             "name": name,
                             "listing_date": listing_date_str,
-                            "subscription_price": 0,
+                            "subscription_price": sub_price,
                             "market_ref_price": 0,
                             "spread_pct": 0.0,
-                            "recommendation": "需查詢承銷價",
+                            "recommendation": _ipo_recommendation(sub_price),
                             "source": "twse_newlisting",
                         })
                     except (IndexError, ValueError):
@@ -86,22 +173,30 @@ class IPOModule(IIPOModule):
         except Exception as exc:
             logger.debug("TWSE newlisting fetch failed: %s", exc)
 
-        # TPEx 新上櫃
+        # ── 3. TPEx 新上櫃 ──
         try:
             url = "https://www.tpex.org.tw/web/regular_emerging/apply/latest/latest_result.php"
-            resp = httpx.get(url, params={"l": "zh-tw"}, timeout=15,
-                           headers={"User-Agent": "Mozilla/5.0"})
+            resp = httpx.get(url, params={"l": "zh-tw"}, timeout=15, headers=_HEADERS)
             if resp.status_code == 200 and "application/json" in resp.headers.get("content-type", ""):
                 data = resp.json()
                 for item in data.get("reportList", [])[:5]:
+                    code = str(item.get("SecuritiesCompanyCode", ""))
+                    if code in seen_codes:
+                        continue
+                    seen_codes.add(code)
+                    sub_price = 0.0
+                    try:
+                        sub_price = float(str(item.get("SubscriptionPrice", 0)).replace(",", ""))
+                    except (ValueError, TypeError):
+                        pass
                     results.append({
-                        "code": str(item.get("SecuritiesCompanyCode", "")),
+                        "code": code,
                         "name": str(item.get("CompanyName", "")),
                         "listing_date": str(item.get("ListingDate", "")),
-                        "subscription_price": 0,
+                        "subscription_price": sub_price,
                         "market_ref_price": 0,
                         "spread_pct": 0.0,
-                        "recommendation": "需查詢承銷價",
+                        "recommendation": _ipo_recommendation(sub_price),
                         "source": "tpex",
                     })
         except Exception as exc:

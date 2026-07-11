@@ -45,28 +45,70 @@ def render() -> None:
             code = item.get("code", "")
             name = item.get("name", "")
             listing = item.get("listing_date", "—")
+            end_date = item.get("end_date", "")
             source = item.get("source", "")
-            source_label = "上市" if "twse" in source else "上櫃" if "tpex" in source else "—"
+            sub_price = item.get("subscription_price", 0)
+            source_label = "MOPS" if "mops" in source else "上市" if "twse" in source else "上櫃" if "tpex" in source else "—"
+
             # 嘗試取得即時報價
             try:
                 q = fetch_stock_quote(code)
                 price = q.get("price", 0)
             except Exception:
                 price = 0
+
+            # 計算價差
+            spread_pct = None
+            if sub_price > 0 and price > 0:
+                spread_pct = (price - sub_price) / sub_price * 100
+
+            # 申購建議
+            if sub_price <= 0:
+                rec = "待查承銷價"
+            elif spread_pct is not None and spread_pct > 20:
+                rec = "🟢 值得申購"
+            elif spread_pct is not None and spread_pct > 0:
+                rec = "🟡 小利空間"
+            elif spread_pct is not None:
+                rec = "🔴 已破發"
+            else:
+                rec = "—"
+
             ipo_rows.append({
                 "代碼": code,
                 "名稱": name,
-                "上市日": listing,
-                "市場": source_label,
-                "現價": price if price else "—",
-                "備註": item.get("recommendation", ""),
+                "承銷價": f"${sub_price:,.0f}" if sub_price > 0 else "待查",
+                "現價": f"${price:,.1f}" if price else "—",
+                "價差%": spread_pct,
+                "申購起日": listing,
+                "申購迄日": end_date if end_date else "—",
+                "來源": source_label,
+                "建議": rec,
             })
+
+        df_ipo = pd.DataFrame(ipo_rows)
         st.dataframe(
-            pd.DataFrame(ipo_rows),
-            width="stretch",
+            df_ipo,
+            use_container_width=True,
             hide_index=True,
+            column_config={
+                "價差%": st.column_config.NumberColumn(format="%+.1f%%"),
+            },
         )
-        st.caption(f"共 {len(fetched_ipos)} 筆，資料來源：TWSE / TPEx（每小時更新）")
+
+        # 統計卡片
+        total = len(ipo_rows)
+        with_price = len([r for r in ipo_rows if r["承銷價"] != "待查"])
+        good_spread = len([r for r in ipo_rows if r["價差%"] is not None and r["價差%"] > 20])
+        cols = st.columns(3)
+        with cols[0]:
+            st.markdown(metric_card("IPO 總數", str(total), status="neutral"), unsafe_allow_html=True)
+        with cols[1]:
+            st.markdown(metric_card("有承銷價", str(with_price), status="positive" if with_price > 0 else "neutral"), unsafe_allow_html=True)
+        with cols[2]:
+            st.markdown(metric_card("價差>20%", str(good_spread), status="positive" if good_spread > 0 else "neutral"), unsafe_allow_html=True)
+
+        st.caption(f"共 {total} 筆，資料來源：MOPS / TWSE / TPEx（每小時更新）")
     else:
         st.info("目前無法取得最近 IPO 資料（API 可能暫時無法連線），可使用下方手動新增。")
 
