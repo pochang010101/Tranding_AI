@@ -22,6 +22,9 @@ PAGES = [
     ("settings",   "⚙️", "系統設定"),
     ("kline",      "🕯️", "K 線分析"),
     ("paper",      "📝", "紙上交易"),
+    ("price_levels", "📐", "交易價位"),
+    ("smart_money",  "🏦", "主力追蹤"),
+    ("factor_health", "🔬", "因子健檢"),
 ]
 
 
