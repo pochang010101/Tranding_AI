@@ -243,10 +243,52 @@ def render() -> None:
         )
         st.plotly_chart(fig3, use_container_width=True)
 
-    # ── 匯出 ──
+    # ── 匯出 + LINE 推送 ──
     st.divider()
-    col_e1, col_e2 = st.columns([3, 1])
+    col_e1, col_e2, col_e3 = st.columns([2, 1, 1])
     with col_e2:
         csv = display_df.head(top_n).to_csv(index=False).encode("utf-8-sig")
         st.download_button("📥 匯出 CSV", csv, "smart_scan_result.csv", "text/csv",
                            use_container_width=True)
+    with col_e3:
+        if st.button("📲 推送到 LINE", use_container_width=True, type="primary"):
+            _push_to_line(display_df.head(top_n))
+
+
+def _push_to_line(df: pd.DataFrame) -> None:
+    """將選股結果格式化後推送到 LINE。"""
+    from datetime import datetime
+    from atlas.infrastructure.notifications.line import send_line_message_sync
+
+    now = datetime.now().strftime("%Y/%m/%d %H:%M")
+    lines = [f"📊 Atlas 選股結果 ({now})", f"共 {len(df)} 檔命中", ""]
+
+    for _, row in df.head(20).iterrows():
+        code = row["代碼"]
+        name = row["名稱"]
+        close = row["收盤"]
+        chg = row["漲跌%"]
+        sign = "+" if chg >= 0 else ""
+        tags = row["訊號標籤"]
+        score = row["選股分數"]
+        foreign = row.get("外資(張)", 0)
+        trust = row.get("投信(張)", 0)
+
+        line = f"{'🔴' if chg >= 3 else '🟢' if chg >= 0 else '🔵'} {code} {name}"
+        line += f" ${close:.0f} ({sign}{chg:.1f}%)"
+        if foreign:
+            line += f" 外{foreign:+d}"
+        if trust:
+            line += f" 投{trust:+d}"
+        line += f"\n  ⭐{score:.0f} {tags}"
+        lines.append(line)
+
+    if len(df) > 20:
+        lines.append(f"\n...還有 {len(df) - 20} 檔，請至系統查看完整清單")
+
+    msg = "\n".join(lines)
+    ok = send_line_message_sync(msg)
+    if ok:
+        st.success("已推送到 LINE！")
+    else:
+        st.error("LINE 推送失敗，請確認 .env 中的 LINE_CHANNEL_ACCESS_TOKEN 是否正確。")
