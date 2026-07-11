@@ -65,22 +65,62 @@ def inject_css() -> None:
     c = get_colors()
     st.markdown(f"""
     <style>
-    /* 卡片容器 */
+    /* ── 全局字體放大 ── */
+    html, body, [class*="css"] {{
+        font-size: 16px !important;
+    }}
+    .block-container {{
+        max-width: 1400px;
+    }}
+
+    /* 標題層次 */
+    h1 {{ font-size: 2rem !important; font-weight: 800 !important; letter-spacing: -0.5px; }}
+    h2 {{ font-size: 1.5rem !important; font-weight: 700 !important; }}
+    h3 {{ font-size: 1.2rem !important; font-weight: 600 !important; }}
+
+    /* Streamlit 元件字體 */
+    .stSelectbox label, .stMultiSelect label, .stNumberInput label,
+    .stTextInput label, .stDateInput label, .stRadio label,
+    .stCheckbox label {{
+        font-size: 15px !important;
+        font-weight: 500 !important;
+    }}
+    .stSelectbox [data-baseweb="select"],
+    .stMultiSelect [data-baseweb="select"],
+    .stNumberInput input, .stTextInput input {{
+        font-size: 15px !important;
+    }}
+    button[kind="primary"], button[kind="secondary"],
+    .stButton > button {{
+        font-size: 15px !important;
+        font-weight: 600 !important;
+        min-height: 42px !important;
+    }}
+    .stTabs [data-baseweb="tab"] {{
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        padding: 10px 20px !important;
+    }}
+    .stCaption, [data-testid="stCaptionContainer"] {{
+        font-size: 13px !important;
+    }}
+
+    /* ── 卡片容器 ── */
     .metric-card {{
         background: {c["bg_card"]};
         border: 1px solid {c["border"]};
         border-radius: 12px;
-        padding: 1.2rem;
+        padding: 1.2rem 1.4rem;
         margin-bottom: 0.8rem;
     }}
     .metric-card h3 {{
         color: {c["text_secondary"]};
-        font-size: 0.85rem;
-        margin: 0 0 0.3rem 0;
+        font-size: 0.95rem;
+        margin: 0 0 0.4rem 0;
         font-weight: 500;
     }}
     .metric-card .value {{
-        font-size: 1.8rem;
+        font-size: 2rem;
         font-weight: 700;
         color: {c["text_primary"]};
     }}
@@ -88,19 +128,19 @@ def inject_css() -> None:
     .metric-card .negative {{ color: {c["negative"]}; }}
     .metric-card .neutral  {{ color: {c["neutral"]}; }}
 
-    /* 狀態標籤 */
+    /* ── 狀態標籤 ── */
     .badge {{
         display: inline-block;
-        padding: 0.2rem 0.6rem;
+        padding: 0.3rem 0.8rem;
         border-radius: 6px;
-        font-size: 0.75rem;
+        font-size: 0.85rem;
         font-weight: 600;
     }}
     .badge-bull {{ background: {c["positive"]}22; color: {c["positive"]}; }}
     .badge-bear {{ background: {c["negative"]}22; color: {c["negative"]}; }}
     .badge-range {{ background: {c["warning"]}22; color: {c["warning"]}; }}
 
-    /* 表格字體加大 + hover */
+    /* ── 表格字體加大 + hover ── */
     .stDataFrame td, .stDataFrame th,
     [data-testid="stDataFrame"] td,
     [data-testid="stDataFrame"] th {{
@@ -113,23 +153,24 @@ def inject_css() -> None:
     }}
     .stDataFrame thead th,
     [data-testid="stDataFrame"] [role="columnheader"] {{
-        font-size: 14px !important;
+        font-size: 15px !important;
         font-weight: 700 !important;
+        color: {c["accent"]} !important;
     }}
     .stDataFrame tbody tr:hover {{
         background: {c["bg_secondary"]} !important;
     }}
 
-    /* 圖例說明區塊 */
+    /* ── 圖例說明區塊 ── */
     .legend-box {{
         background: {c["bg_card"]};
         border: 1px solid {c["border"]};
         border-radius: 8px;
-        padding: 10px 14px;
+        padding: 12px 16px;
         margin: 8px 0;
-        font-size: 13px;
+        font-size: 14px;
         color: {c["text_secondary"]};
-        line-height: 1.6;
+        line-height: 1.7;
     }}
     .legend-box strong {{
         color: {c["text_primary"]};
@@ -138,7 +179,18 @@ def inject_css() -> None:
     .legend-bad {{ color: {c["negative"]}; font-weight: 600; }}
     .legend-warn {{ color: {c["warning"]}; font-weight: 600; }}
 
-    /* 隱藏 Streamlit footer */
+    /* ── 分隔線強化 ── */
+    hr {{
+        border-color: {c["border"]} !important;
+        margin: 1.2rem 0 !important;
+    }}
+
+    /* ── st.info / st.warning / st.success 字體 ── */
+    .stAlert p {{
+        font-size: 15px !important;
+    }}
+
+    /* ── 隱藏 Streamlit footer ── */
     footer {{ visibility: hidden; }}
     </style>
     """, unsafe_allow_html=True)

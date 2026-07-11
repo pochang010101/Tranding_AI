@@ -69,15 +69,15 @@ def render_sidebar() -> str:
     st.markdown("""
     <style>
     div[data-testid="stHorizontalBlock"].nav-bar button {
-        font-size: 13px !important;
-        padding: 4px 8px !important;
-        min-height: 36px !important;
+        font-size: 14px !important;
+        padding: 6px 10px !important;
+        min-height: 40px !important;
     }
     .nav-container {
         background: rgba(30,30,30,0.6);
         border-radius: 12px;
-        padding: 6px 8px;
-        margin-bottom: 12px;
+        padding: 8px 10px;
+        margin-bottom: 16px;
         border: 1px solid rgba(255,255,255,0.08);
     }
     </style>

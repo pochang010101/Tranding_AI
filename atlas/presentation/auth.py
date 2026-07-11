@@ -78,6 +78,13 @@ def check_password() -> bool:
     if st.session_state.get("authenticated"):
         return True
 
+    # Auto-login: if ATLAS_AUTO_LOGIN is set (or default), skip login form
+    auto_login = os.getenv("ATLAS_AUTO_LOGIN", "true").lower() in ("true", "1", "yes")
+    if auto_login:
+        st.session_state["authenticated"] = True
+        st.session_state["username"] = os.getenv("ATLAS_USERNAME", "admin")
+        return True
+
     _ensure_nonce()
 
     valid_username = os.getenv("ATLAS_USERNAME", "admin")

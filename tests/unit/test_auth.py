@@ -2,9 +2,13 @@
 
 import hashlib
 import importlib
+import os
 import secrets
 import time
 from unittest.mock import MagicMock, patch
+
+# Disable auto-login for all auth tests
+os.environ["ATLAS_AUTO_LOGIN"] = "false"
 
 
 # ---------------------------------------------------------------------------
