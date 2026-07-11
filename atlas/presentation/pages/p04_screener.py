@@ -40,23 +40,35 @@ def render() -> None:
     <span class="legend-good">大買</span> 大額買超 |
     <span class="legend-good">大量/爆量</span> 成交量異常放大 |
     <span class="legend-good">強勢</span> 漲幅≥3% |
-    <span class="legend-warn">漲停</span> 漲幅≥9.5%<br>
+    <span class="legend-warn">漲停</span> 漲幅≥9.5% |
+    <span class="legend-good">熱門題材</span> 屬於當日漲幅領先的概念股 |
+    <span class="legend-good">多題材交集</span> 同時屬於2個以上熱門題材<br>
     <strong>選股分數</strong>：分數越高表示多個正面訊號同時出現，<span class="legend-good">≥50 強烈推薦</span>、<span class="legend-warn">30~50 值得關注</span>、<span class="legend-bad">&lt;30 單一訊號</span>
     </div>
     """, unsafe_allow_html=True)
 
     # ── 控制列 ──
-    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
         min_price = st.number_input("最低股價", value=10.0, step=5.0, key="scr_min_price")
     with col2:
         min_vol = st.number_input("最低成交量(張)", value=500, step=100, key="scr_min_vol")
     with col3:
         top_n = st.selectbox("顯示筆數", [20, 50, 100, 200], index=1)
+
+    col4, col5 = st.columns(2)
     with col4:
         tag_filter = st.multiselect(
             "篩選標籤",
-            ["外資買超", "投信買超", "雙法人", "外資大買", "投信大買", "大量", "爆量", "強勢", "漲停"],
+            ["外資買超", "投信買超", "雙法人", "外資大買", "投信大買",
+             "大量", "爆量", "強勢", "漲停", "熱門題材", "多題材交集"],
+            default=[],
+        )
+    with col5:
+        from atlas.strategy.theme_catalog import THEME_MAP
+        theme_filter = st.multiselect(
+            "篩選題材",
+            sorted(THEME_MAP.keys()),
             default=[],
         )
 
@@ -73,6 +85,20 @@ def render() -> None:
             try:
                 scan_result = _run_smart_scan()
                 st.session_state["smart_scan_result"] = scan_result
+                # 同步取得熱門題材
+                try:
+                    from atlas.infrastructure.twse_bulk import fetch_twse_daily_all
+                    from atlas.strategy.theme_catalog import detect_hot_themes
+                    daily_df = fetch_twse_daily_all()
+                    hot = detect_hot_themes(daily_df)
+                    st.session_state["hot_themes_data"] = [
+                        {"name": t.name, "avg": t.avg_change_pct,
+                         "up": t.up_count, "total": t.stock_count,
+                         "top": t.top_stocks, "score": t.heat_score}
+                        for t in hot
+                    ]
+                except Exception:
+                    st.session_state["hot_themes_data"] = []
             except Exception as exc:
                 st.error(f"掃描失敗：{exc}")
                 st.info("可能原因：非交易時段、API 暫時無法連線。請稍後再試。")
@@ -82,16 +108,21 @@ def render() -> None:
         st.warning("掃描無結果。可能原因：非交易日、API 尚未更新、或篩選條件過嚴。")
         return
 
-    # ── 標籤篩選 ──
+    # ── 標籤 + 題材篩選 ──
     display_df = scan_result.copy()
     if tag_filter:
         mask = display_df["訊號標籤"].apply(
             lambda tags: any(t in tags for t in tag_filter)
         )
         display_df = display_df[mask]
+    if theme_filter:
+        mask = display_df["題材"].apply(
+            lambda themes: any(t in str(themes) for t in theme_filter)
+        )
+        display_df = display_df[mask]
 
     if display_df.empty:
-        st.warning("沒有符合所選標籤的結果。")
+        st.warning("沒有符合所選條件的結果。")
         return
 
     # 重新編排名
@@ -126,6 +157,21 @@ def render() -> None:
         st.markdown(metric_card("高分(≥50)", str(high_score),
                     status="positive" if high_score > 0 else "neutral"),
                     unsafe_allow_html=True)
+
+    # ── 熱門題材 ──
+    hot_themes_data = st.session_state.get("hot_themes_data")
+    if hot_themes_data:
+        st.divider()
+        st.subheader("🔥 今日熱門題材")
+        theme_cols = st.columns(min(5, len(hot_themes_data)))
+        for i, th in enumerate(hot_themes_data[:5]):
+            with theme_cols[i]:
+                status = "positive" if th["avg"] >= 1.0 else "warning" if th["avg"] >= 0 else "negative"
+                st.markdown(metric_card(
+                    th["name"], f"{th['avg']:+.1f}%",
+                    delta=f"{th['up']}/{th['total']} 上漲",
+                    status=status,
+                ), unsafe_allow_html=True)
 
     # ── 結果表格 ──
     st.divider()
@@ -274,6 +320,8 @@ def _push_to_line(df: pd.DataFrame) -> None:
         foreign = row.get("外資(張)", 0)
         trust = row.get("投信(張)", 0)
 
+        themes = row.get("題材", "")
+
         line = f"{'🔴' if chg >= 3 else '🟢' if chg >= 0 else '🔵'} {code} {name}"
         line += f" ${close:.0f} ({sign}{chg:.1f}%)"
         if foreign:
@@ -281,6 +329,8 @@ def _push_to_line(df: pd.DataFrame) -> None:
         if trust:
             line += f" 投{trust:+d}"
         line += f"\n  ⭐{score:.0f} {tags}"
+        if themes and themes != "—":
+            line += f"\n  📌{themes}"
         lines.append(line)
 
     if len(df) > 20:

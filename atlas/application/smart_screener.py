@@ -34,6 +34,7 @@ class ScreenerHit:
     total_inst_net: int = 0    # 三大法人合計
     foreign_net_lots: int = 0  # 外資淨買賣 (張)
     trust_net_lots: int = 0    # 投信淨買賣 (張)
+    themes: list[str] = field(default_factory=list)  # 所屬題材
     tags: list[str] = field(default_factory=list)
     score: float = 0.0
 
@@ -110,7 +111,12 @@ class SmartScreener:
 
         df_merged = df_merged.fillna(0)
 
-        # 6. 計算標籤與評分
+        # 6. 偵測熱門題材
+        from atlas.strategy.theme_catalog import detect_hot_themes, get_themes_for_code
+        hot_themes = detect_hot_themes(df_daily)
+        hot_theme_names = {t.name for t in hot_themes if t.heat_score >= 50}
+
+        # 7. 計算標籤與評分
         results = []
         for _, row in df_merged.iterrows():
             tags = []
@@ -170,12 +176,23 @@ class SmartScreener:
                 tags.append("跌停")
                 score -= 20
 
+            # 題材面
+            code_str = str(row["code"])
+            stock_themes = get_themes_for_code(code_str)
+            hot_matched = [t for t in stock_themes if t in hot_theme_names]
+            if hot_matched:
+                tags.append("熱門題材")
+                score += 15
+                if len(hot_matched) >= 2:
+                    tags.append("多題材交集")
+                    score += 10
+
             # 只保留有標籤的（至少符合一個正面條件）
             if not tags or score <= 0:
                 continue
 
             results.append(ScreenerHit(
-                code=str(row["code"]),
+                code=code_str,
                 name=str(row["name"]),
                 close=close,
                 change_pct=change_pct,
@@ -186,6 +203,7 @@ class SmartScreener:
                 total_inst_net=total_net,
                 foreign_net_lots=foreign_lots,
                 trust_net_lots=trust_lots,
+                themes=stock_themes,
                 tags=tags,
                 score=score,
             ))
@@ -213,6 +231,7 @@ class SmartScreener:
                 "外資(張)": h.foreign_net_lots,
                 "投信(張)": h.trust_net_lots,
                 "法人合計(張)": h.total_inst_net // 1000,
+                "題材": " | ".join(h.themes) if h.themes else "—",
                 "選股分數": h.score,
                 "訊號標籤": " | ".join(h.tags),
             })
