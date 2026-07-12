@@ -122,6 +122,17 @@ def _price_level_chart(
 
 def render() -> None:
     st.title("📐 交易價位分析")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+🟢 <strong>支撐位（S1/S2/S3）</strong>：股價下方的重要支撐價格（綠色虛線），跌破後可能加速下跌，是停損的重要參考。<br>
+🔴 <strong>壓力位（R1/R2/R3）</strong>：股價上方的重要壓力價格（紅色虛線），有效突破後可能加速上漲。<br>
+🔶 <strong>Fibonacci 回撤</strong>：依波段高低點計算黃金比例回檔位（38.2% / 50% / 61.8%），常見趨勢中的反轉位置。<br>
+🔺 <strong>拉回買點</strong>：綜合支撐 + Fibonacci 計算的理想回檔進場價（綠色三角標記）。<br>
+💎 <strong>突破買點</strong>：突破壓力後的追漲進場參考價（藍色菱形標記）。<br>
+🛑 <strong>停損價</strong>：風控出場價位（紅色點劃線），建議虧損不超過單筆風險上限。風報比 ≥ 2 為佳。
+</div>
+""", unsafe_allow_html=True)
     c = get_colors()
 
     # ── 控制列 ──

@@ -12,6 +12,15 @@ from atlas.presentation.components.charts import equity_curve, bar_chart
 
 def render() -> None:
     st.title("📝 紙上交易")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+💰 <strong>模擬資金</strong>：使用虛擬資金操作，完全不影響實際帳戶，適合策略驗證與練習。<br>
+🧾 <strong>手續費 / 稅</strong>：買入手續費 0.1425%、賣出手續費 0.1425% + 證交稅 0.3%，完整模擬真實交易成本。<br>
+📊 <strong>損益計算</strong>：已扣除手續費與稅金的真實淨損益，報酬率以起始資金為基準計算。<br>
+🔄 <strong>委託狀態</strong>：已成交 = 模擬市價成交；持倉中 = 尚未平倉；交易紀錄保留完整進出場歷史。
+</div>
+""", unsafe_allow_html=True)
     c = get_colors()
 
     # 初始化 session state

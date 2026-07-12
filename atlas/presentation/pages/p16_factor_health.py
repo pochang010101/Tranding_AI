@@ -241,6 +241,16 @@ def _render_strategy_health() -> None:
 
 def render() -> None:
     st.title("🔬 因子健檢 & 策略健康度")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+<span class="legend-good">IC (Information Coefficient)</span>：因子預測力（與未來報酬的相關係數），<span class="legend-good">|IC|&gt;0.05 有效</span>、<span class="legend-good">|IC|&gt;0.1 強效</span>、<span class="legend-bad">&lt;0.03 無效</span><br>
+<span class="legend-good">ICIR</span>：IC 穩定度（IC均值 / IC標準差），<span class="legend-good">&gt;0.5 穩定有效</span>、<span class="legend-warn">0~0.5 不穩定</span>、<span class="legend-bad">&lt;0 反向因子</span><br>
+<span class="legend-neutral">衰減天數</span>：因子效力持續天數，越長越適合中長期策略，越短適合短線使用<br>
+<span class="legend-good">因子權重</span>：建議配置比例，<span class="legend-good">權重高 = 該因子近期表現佳</span>，可加大參考比重<br>
+<span class="legend-good">策略健康分</span>：綜合評估策略狀態，<span class="legend-good">&gt;70 健康</span>、<span class="legend-warn">50~70 注意</span>、<span class="legend-bad">&lt;50 需調整</span>
+</div>
+""", unsafe_allow_html=True)
 
     tab1, tab2 = st.tabs(["📊 因子 ICIR", "🏥 策略健康度"])
 

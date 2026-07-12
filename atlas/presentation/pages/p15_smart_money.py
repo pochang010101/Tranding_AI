@@ -42,6 +42,16 @@ _PHASE_DESCRIPTIONS = {
 
 def render() -> None:
     st.title("🏦 主力追蹤")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+<span class="legend-good">吸貨階段</span>：主力悄悄買進，量縮價穩、籌碼集中度上升，為布局期<br>
+<span class="legend-warn">洗盤階段</span>：刻意打壓清洗浮額，急跌但量縮、散戶恐慌出場，籌碼仍集中<br>
+<span style="color:#2196f3;font-weight:600">拉抬階段</span>：主力開始推升股價，量增價漲、突破關鍵壓力，為上漲期<br>
+<span class="legend-bad">出貨階段</span>：主力逢高出貨，量大但價格停滯、散戶追高接貨，需警戒<br>
+<span class="legend-neutral">階段判定</span>：系統根據量價 + 籌碼集中度自動判定當前所處階段，信心度越高越可靠
+</div>
+""", unsafe_allow_html=True)
     c = get_colors()
 
     # ── 控制列 ──
