@@ -93,6 +93,16 @@ def _calc_industry_rs(stock_list: list[tuple[str, str]]) -> pd.DataFrame:
 
 def render() -> None:
     st.title("🏭 產業分析")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+<b>產業漲跌幅（RS）</b>：該產業當日/週期平均漲跌，領漲產業=資金流入方向｜
+<b>輪動排名</b>：產業相對強弱排序，前3名=當前主流族群｜
+<b>資金流向（代理）</b>：以漲跌方向×成交量×收盤價估算，正值=資金淨流入｜
+<b>趨勢</b>：🔥領漲=5日排名優於20日排名且漲幅&gt;5%、⬆️上升=短期強勢、❄️落後=短期弱勢｜
+<b>輪動週期</b>：排名持續天數，&gt;5天=趨勢確認
+</div>
+""", unsafe_allow_html=True)
     get_colors()
 
     with st.spinner(f"正在計算 {len(TW_TOP_STOCKS)} 支股票產業 RS，請稍候…"):

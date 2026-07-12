@@ -47,6 +47,16 @@ def _render_realtime_quotes() -> None:
 
 def render() -> None:
     st.title("📊 總覽儀表板")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+<span class="legend-good">大盤指數漲跌</span>：&gt;0 多方走強、&lt;0 空方走弱，為當日市場方向依據<br>
+<span class="legend-good">成交量</span>：&gt;2000億 市場熱絡、1000~2000億 正常、&lt;1000億 冷清觀望<br>
+<span class="legend-warn">情緒分數（RSI）</span>：5 級制 — <span class="legend-bad">極度恐懼（&lt;30）</span>為逆勢買進機會、<span class="legend-good">極度貪婪（&gt;70）</span>需提高風險意識<br>
+<span class="legend-warn">市場狀態</span>：<span class="legend-good">Bull 多頭趨勢</span>（MA8&gt;MA21 且收盤&gt;MA8）、<span class="legend-bad">Bear 空頭趨勢</span>（MA8&lt;MA21 且收盤&lt;MA8）、<span class="legend-warn">Range 盤整</span><br>
+<span class="legend-good">排程狀態</span>：顯示盤前/盤中/盤後/月度重建各自動化任務的排定與執行情況
+</div>
+""", unsafe_allow_html=True)
     c = get_colors()
     market = st.session_state.get("market", "TW")
 

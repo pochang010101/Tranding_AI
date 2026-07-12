@@ -109,6 +109,15 @@ def _run_filter(stock_list: list[tuple[str, str]]) -> dict:
 
 def render() -> None:
     st.title("🗂️ 選股池管理")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+<span class="legend-good">股票池</span>：系統自動維護的觀察名單，每月重建一次，涵蓋 TWSE+TPEx 全市場符合門檻的標的<br>
+<span class="legend-warn">入池條件（四層漏斗）</span>：L1 流動性（日均量&gt;500張）→ L2 技術面（收盤&gt;MA55）→ L3 策略適性（ATR&gt;0.5%）→ L4 排除（非警示/下市）<br>
+<span class="legend-good">池內排名</span>：依綜合評分排序，越前面代表綜合條件越佳，越值得優先關注<br>
+<span class="legend-warn">狀態標記</span>：<span class="legend-good">活躍 — 持續符合全部條件</span>、<span class="legend-warn">觀察 — 部分條件不符，需留意是否降級</span>
+</div>
+""", unsafe_allow_html=True)
     get_colors()  # 確保 theme 初始化
 
     # ── 執行篩選 ─────────────────────────────────

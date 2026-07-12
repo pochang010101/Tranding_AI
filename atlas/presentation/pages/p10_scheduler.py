@@ -12,6 +12,16 @@ from atlas.presentation.service_container import get_scheduler, get_workflow_eng
 
 def render() -> None:
     st.title("⏰ 排程管理")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+<b>排程狀態</b>：🟢 正常執行、🟡 等待中、🔴 執行失敗｜
+<b>執行時間</b>：各任務 cron 排程時間（台灣時區 UTC+8）｜
+<b>下次執行</b>：預計下一次觸發時間｜
+<b>任務類型</b>：pre_market(盤前 08:00)、intraday(盤中 09:00)、post_market(盤後 13:45)、monthly(月度重建 週日 20:00)｜
+<b>非交易日</b>：週末/假日自動跳過（monthly_rebuild 除外）
+</div>
+""", unsafe_allow_html=True)
     c = get_colors()
 
     scheduler = get_scheduler()

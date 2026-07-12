@@ -125,6 +125,15 @@ def _calc_performance(
 
 def render() -> None:
     st.title("💼 持倉追蹤")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+<b>持倉損益</b>：正值=獲利中（綠）、負值=虧損中（紅）｜
+<b>R-multiple</b>：以初始風險(R)衡量報酬，&gt;2R=優秀、1~2R=良好、&lt;0=虧損｜
+<b>部位大小</b>：佔總資金比例，單一部位建議&lt;10%，總曝險&lt;60%｜
+<b>停損價</b>：跌破即出場的價位，紀律執行是風控核心
+</div>
+""", unsafe_allow_html=True)
     get_colors()
 
     # ── 讀取 session_state ───────────────────────

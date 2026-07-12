@@ -11,6 +11,15 @@ from atlas.presentation.service_container import fetch_stock_quote, fetch_stock_
 
 def render() -> None:
     st.title("🌏 盤前分析")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+<span class="legend-good">國際行情</span>：美股（道瓊/S&amp;P/NASDAQ/費半）漲跌直接影響台股開盤方向，費半對台灣科技股尤為關鍵<br>
+<span class="legend-warn">缺口預測</span>：綜合費半、S&amp;P500、NASDAQ、台積ADR 漲跌估算開盤跳空幅度 — <span class="legend-good">&gt;+0.5% 有跳空高開機會</span>、<span class="legend-bad">&lt;-0.5% 可能低開</span><br>
+<span class="legend-warn">環境評估</span>：整合國際行情判斷今日操作環境 — <span class="legend-good">偏多（積極操作）</span>、<span class="legend-bad">偏空（保守觀望）</span>、<span class="legend-warn">中性（選股為主）</span><br>
+<span class="legend-warn">情緒分數（RSI）</span>：大盤 RSI 反映市場整體恐懼/貪婪程度，影響部位積極度與停損設定
+</div>
+""", unsafe_allow_html=True)
     c = get_colors()
 
     # ── 美股四大指數（即時 yfinance）────────────

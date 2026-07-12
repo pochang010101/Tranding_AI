@@ -271,6 +271,16 @@ def _run_backtest(
 
 def render() -> None:
     st.title("回測分析")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+<b>年化報酬</b>：策略年化收益率，&gt;15% 優秀、5~15% 正常、&lt;5% 偏弱｜
+<b>最大回撤</b>：歷史最大虧損幅度，&lt;-20% 風險高、-10%~-20% 可接受｜
+<b>勝率</b>：獲利交易佔比，&gt;50% 為正、需配合盈虧比評估｜
+<b>盈虧比（獲利因子）</b>：平均獲利/平均虧損，&gt;1.5 良好、&gt;2.0 優秀｜
+<b>Sharpe Ratio</b>：風險調整後報酬，&gt;1.0 良好、&gt;2.0 優秀
+</div>
+""", unsafe_allow_html=True)
     get_colors()
 
     # ── 控制面板 ────────────────────────────────

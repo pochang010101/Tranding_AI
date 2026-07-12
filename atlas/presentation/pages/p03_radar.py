@@ -19,6 +19,15 @@ from atlas.presentation.service_container import (
 
 def render() -> None:
     st.title("📡 盤中雷達")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+<span class="legend-good">即時訊號</span>：11 種盤中偵測器（產業急拉/大單異常/爆量啟動/起漲觸發/均線跌破/甩轎回穩/出貨預警/價量背離/急拉急殺/流動性掃單/OB回測）<br>
+<span class="legend-warn">訊號強度（嚴重度）</span>：<span class="legend-good">3⭐ Strong — 立即關注</span>、<span class="legend-warn">2⭐ Medium — 列入觀察</span>、<span class="legend-bad">1⭐ Weak — 僅供參考</span><br>
+<span class="legend-good">觸發時間</span>：訊號發生的時間點，越近期越具有效性，盤末訊號需隔日確認<br>
+<span class="legend-warn">方向</span>：<span class="legend-good">BUY 買入訊號</span>、<span class="legend-bad">SELL 賣出/警示訊號</span>、<span class="legend-warn">ALERT 中性警示</span>
+</div>
+""", unsafe_allow_html=True)
     c = get_colors()
 
     # ── 雷達狀態 ────────────────────────────────
