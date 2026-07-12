@@ -14,8 +14,8 @@ DARK = {
     "text_secondary": "#b0b8c1",
     "accent": "#00d4aa",
     "accent_secondary": "#667eea",
-    "positive": "#00c853",
-    "negative": "#ff1744",
+    "positive": "#ff1744",      # 台股慣例：紅色=漲
+    "negative": "#00c853",      # 台股慣例：綠色=跌
     "warning": "#ff9100",
     "neutral": "#78909c",
     "border": "#3a3f4b",
@@ -23,8 +23,8 @@ DARK = {
     "plotly_bg": "#0e1117",
     "plotly_paper": "#1a1d23",
     "plotly_grid": "#2a2d35",
-    "candle_up": "#00c853",
-    "candle_down": "#ff1744",
+    "candle_up": "#ff1744",     # 紅K=收漲
+    "candle_down": "#00c853",   # 綠K=收跌
 }
 
 LIGHT = {
@@ -35,8 +35,8 @@ LIGHT = {
     "text_secondary": "#6b7280",
     "accent": "#0066ff",
     "accent_secondary": "#7c3aed",
-    "positive": "#16a34a",
-    "negative": "#dc2626",
+    "positive": "#dc2626",      # 台股慣例：紅色=漲
+    "negative": "#16a34a",      # 台股慣例：綠色=跌
     "warning": "#f59e0b",
     "neutral": "#9ca3af",
     "border": "#e5e7eb",
