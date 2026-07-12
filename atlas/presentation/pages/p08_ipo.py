@@ -33,7 +33,7 @@ def render() -> None:
     </div>
     """, unsafe_allow_html=True)
 
-    @st.cache_data(ttl=3600, show_spinner="正在抓取最近 IPO 資料…")
+    @st.cache_data(ttl=600, show_spinner="正在抓取最近 IPO 資料…")
     def _fetch_recent_ipos() -> list[dict]:
         """從 TWSE / TPEx 抓取最近新上市櫃資料。"""
         from atlas.strategy.ipo_module import IPOModule

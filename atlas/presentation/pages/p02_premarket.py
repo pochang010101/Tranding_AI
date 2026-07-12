@@ -14,10 +14,16 @@ def render() -> None:
     st.markdown("""
 <div class="legend-box">
 <strong>欄位說明</strong><br>
-<span class="legend-good">國際行情</span>：美股（道瓊/S&amp;P/NASDAQ/費半）漲跌直接影響台股開盤方向，費半對台灣科技股尤為關鍵<br>
-<span class="legend-warn">缺口預測</span>：綜合費半、S&amp;P500、NASDAQ、台積ADR 漲跌估算開盤跳空幅度 — <span class="legend-good">&gt;+0.5% 有跳空高開機會</span>、<span class="legend-bad">&lt;-0.5% 可能低開</span><br>
+<span class="legend-good">國際行情</span>：美股（道璨/S&amp;P/NASDAQ/費半）漲跌直接影響台股開盤方向，費半對台灣科技股尤為關鍵<br>
+<span class="legend-warn">缺口預測</span>：預估今日開盤價相對昨日收盤的跳空幅度<br>
+&nbsp;&nbsp;• 計算因子：費半漲跌＋台指期夜盤＋台積電ADR折溢傹＋匯率動向<br>
+&nbsp;&nbsp;• <span class="legend-good">&gt;+0.5%</span> 跳空高開（追多風險高，等拉回再買；持有者觀察缺口是否回補）<br>
+&nbsp;&nbsp;• <span class="legend-bad">&lt;-0.5%</span> 跳空低開（恐慌殺盤=撿便宜機會；弱勢股可能加速破底）<br>
+&nbsp;&nbsp;• ±0.5% 內為平盤區間，依個股操作<br>
+&nbsp;&nbsp;• <strong>實質意義</strong>：讓你在 9:00 開盤前就掌握今日方向，提前規劃委託策略<br>
 <span class="legend-warn">環境評估</span>：整合國際行情判斷今日操作環境 — <span class="legend-good">偏多（積極操作）</span>、<span class="legend-bad">偏空（保守觀望）</span>、<span class="legend-warn">中性（選股為主）</span><br>
-<span class="legend-warn">情緒分數（RSI）</span>：大盤 RSI 反映市場整體恐懼/貪婪程度，影響部位積極度與停損設定
+<span class="legend-warn">情緒分數（RSI）</span>：大盤 RSI 反映市場整體恐懼/貪婪程度，影響部位積極度與停損設定<br>
+<strong>顏色慣例</strong>：<span class="legend-good">紅色=漲/正面</span>、<span class="legend-bad">綠色=跌/負面</span>（台股標準）
 </div>
 """, unsafe_allow_html=True)
     c = get_colors()

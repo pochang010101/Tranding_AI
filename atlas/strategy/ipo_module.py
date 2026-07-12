@@ -114,25 +114,27 @@ class IPOModule(IIPOModule):
                                 continue
                             name = parts[1] if len(parts) > 1 else ""
 
+                            # [13] = 備註（申購中/已截止/nan）
+                            note = str(row.iloc[13]).strip().lower() if pd.notna(row.iloc[13]) else ""
+                            if "截止" in note:
+                                continue
+
                             # [3] = 申購期間 "MM/DD~MM/DD"
                             sub_period = str(row.iloc[3]).strip()
                             start_date_str = ""
                             end_date_str = ""
-                            is_expired = True
                             if "~" in sub_period:
                                 s_part, e_part = sub_period.split("~")
                                 start_date_str = f"{today.year}/{s_part.strip()}"
                                 end_date_str = f"{today.year}/{e_part.strip()}"
+                                # 用申購迄日判斷是否過期（備註為空時 fallback）
                                 try:
                                     em, ed = e_part.strip().split("/")
                                     end_dt = _date(today.year, int(em), int(ed))
-                                    is_expired = today > end_dt
+                                    if today > end_dt:
+                                        continue
                                 except (ValueError, IndexError):
                                     pass
-
-                            # 過濾已截止的申購
-                            if is_expired:
-                                continue
 
                             seen_codes.add(code)
 
