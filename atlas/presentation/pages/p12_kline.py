@@ -26,6 +26,16 @@ PERIOD_MAP = {
 
 def render() -> None:
     st.title("🕯️ K 線分析")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+🕯️ <strong>K線顏色</strong>：紅色 = 收漲（收盤 &gt; 開盤）、綠色 = 收跌（收盤 &lt; 開盤）。<br>
+📈 <strong>均線</strong>：MA8（短線）、MA21（月線）、MA55（季線）；股價在均線上方且均線向上排列 = 多頭格局。<br>
+📊 <strong>成交量</strong>：量增價漲 = 健康走勢；量縮價漲 = 動能不足；爆量長黑 = 警訊，留意主力出貨。<br>
+🔢 <strong>RSI</strong>：&gt; 70 超買（注意回檔）、&lt; 30 超賣（可能反彈）；建議搭配趨勢使用。<br>
+📉 <strong>MACD</strong>：MACD 線由下穿越 Signal 線 = 金叉（買訊）；由上穿越 = 死叉（賣訊）；柱狀體縮短代表動能轉弱。
+</div>
+""", unsafe_allow_html=True)
     c = get_colors()
 
     # ── 股票選擇 ─────────────────────────────────
