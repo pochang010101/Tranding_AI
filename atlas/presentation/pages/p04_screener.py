@@ -46,7 +46,8 @@ def render() -> None:
     <span class="legend-warn">漲停</span> 漲幅≥9.5% |
     <span class="legend-good">熱門題材</span> 屬於當日漲幅領先的概念股 |
     <span class="legend-good">多題材交集</span> 同時屬於2個以上熱門題材<br>
-    <strong>選股分數</strong>：分數越高表示多個正面訊號同時出現，<span class="legend-good">≥50 強烈推薦</span>、<span class="legend-warn">30~50 值得關注</span>、<span class="legend-bad">&lt;30 單一訊號</span>
+    <strong>選股分數</strong>：分數越高表示多個正面訊號同時出現，<span class="legend-good">≥50 強烈推薦</span>、<span class="legend-warn">30~50 值得關注</span>、<span class="legend-bad">&lt;30 單一訊號</span><br>
+    <strong>RSI(14)</strong>：相對強弱指標，<span class="legend-bad">&gt;70 超買</span>、50 多空平衡、<span class="legend-good">&lt;30 超賣反彈機會</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -195,6 +196,7 @@ def render() -> None:
         height=min(600, 40 + len(show_df) * 35),
         column_config={
             "選股分數": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
+            "RSI": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
             "漲跌%": st.column_config.NumberColumn(format="%+.2f%%"),
             "收盤": st.column_config.NumberColumn(format="$%.2f"),
             "成交量(張)": st.column_config.NumberColumn(format="%d"),

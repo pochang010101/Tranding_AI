@@ -35,6 +35,7 @@ class ScreenerHit:
     foreign_net_lots: int = 0  # 外資淨買賣 (張)
     trust_net_lots: int = 0    # 投信淨買賣 (張)
     themes: list[str] = field(default_factory=list)  # 所屬題材
+    is_otc: bool = False  # True = 上櫃 (TPEx)
     tags: list[str] = field(default_factory=list)
     score: float = 0.0
 
@@ -74,6 +75,7 @@ class SmartScreener:
         # 1. 取得行情 (TWSE + TPEx)
         df_twse = fetch_twse_daily_all(dt)
         df_tpex = fetch_tpex_daily_all(dt)
+        otc_codes: set[str] = set(df_tpex["code"].tolist()) if not df_tpex.empty else set()
         df_daily = pd.concat([df_twse, df_tpex], ignore_index=True) if not df_tpex.empty else df_twse
 
         if df_daily.empty:
@@ -204,6 +206,7 @@ class SmartScreener:
                 foreign_net_lots=foreign_lots,
                 trust_net_lots=trust_lots,
                 themes=stock_themes,
+                is_otc=code_str in otc_codes,
                 tags=tags,
                 score=score,
             ))
@@ -225,6 +228,7 @@ class SmartScreener:
             return pd.DataFrame()
 
         rows = []
+        otc_flags = []
         for i, h in enumerate(hits, 1):
             rows.append({
                 "排名": i,
@@ -240,4 +244,67 @@ class SmartScreener:
                 "選股分數": h.score,
                 "訊號標籤": " | ".join(h.tags),
             })
-        return pd.DataFrame(rows)
+            otc_flags.append(h.is_otc)
+        df = pd.DataFrame(rows)
+
+        # 批次計算 RSI(14)：取前 200 筆用 yfinance 抓 30 天歷史收盤
+        top_codes = df["代碼"].head(200).tolist()
+        top_otc = otc_flags[:200]
+        df["RSI"] = self._batch_rsi(top_codes, otc_flags=top_otc)
+        return df
+
+    @staticmethod
+    def _batch_rsi(
+        codes: list[str], period: int = 14, otc_flags: list[bool] | None = None
+    ) -> pd.Series:
+        """批次計算 RSI(14)，回傳與 codes 等長的 Series。"""
+        import numpy as np
+
+        rsi_values: list[float | None] = []
+
+        try:
+            import yfinance as yf
+
+            # 台股代碼：上市用 .TW、上櫃用 .TWO
+            if otc_flags is None:
+                otc_flags = [False] * len(codes)
+            tickers = [f"{c}.TWO" if is_otc else f"{c}.TW" for c, is_otc in zip(codes, otc_flags)]
+            # 下載 30 天歷史（確保有 14 天有效資料）
+            data = yf.download(
+                tickers, period="30d", progress=False, threads=True, auto_adjust=True
+            )
+
+            close_df = data["Close"] if "Close" in data.columns.get_level_values(0) else data
+
+            for i, code in enumerate(codes):
+                ticker = tickers[i]
+                try:
+                    if ticker in close_df.columns:
+                        series = close_df[ticker].dropna()
+                    else:
+                        series = close_df.iloc[:, 0].dropna() if len(codes) == 1 else pd.Series()
+
+                    if len(series) >= period + 1:
+                        delta = series.diff()
+                        gain = delta.where(delta > 0, 0.0)
+                        loss = (-delta).where(delta < 0, 0.0)
+                        avg_gain = gain.ewm(alpha=1 / period, min_periods=period).mean()
+                        avg_loss = loss.ewm(alpha=1 / period, min_periods=period).mean()
+                        rs = avg_gain / avg_loss.replace(0, np.nan)
+                        rsi_series = 100 - (100 / (1 + rs))
+                        rsi_val = rsi_series.iloc[-1]
+                        rsi_values.append(round(float(rsi_val), 1) if pd.notna(rsi_val) else None)
+                    else:
+                        rsi_values.append(None)
+                except Exception:
+                    rsi_values.append(None)
+        except Exception as exc:
+            logger.warning("RSI batch calculation failed: %s", exc)
+            rsi_values = [None] * len(codes)
+
+        # 補足剩餘列（超過 200 的部分）
+        total_needed = len(codes)
+        while len(rsi_values) < total_needed:
+            rsi_values.append(None)
+
+        return pd.Series(rsi_values, name="RSI")
