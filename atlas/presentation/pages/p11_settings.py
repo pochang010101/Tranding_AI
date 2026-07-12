@@ -12,6 +12,14 @@ from atlas.presentation.components.theme import get_colors, metric_card
 
 def render() -> None:
     st.title("⚙️ 系統設定")
+    st.markdown("""
+<div class="legend-box">
+<strong>欄位說明</strong><br>
+📌 <strong>各設定項</strong>：調整系統參數，包含通知管道、API Key、交易偏好等，分頁管理不同類型設定。<br>
+⚡ <strong>即時生效</strong>：部分設定（如風控參數、選股參數）修改後按「儲存」即生效，無需重啟服務。<br>
+🔒 <strong>敏感資訊</strong>：API Key、Webhook URL、資料庫連線字串以遮罩顯示，實際值請透過環境變數或 .env 設定。
+</div>
+""", unsafe_allow_html=True)
     c = get_colors()
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
