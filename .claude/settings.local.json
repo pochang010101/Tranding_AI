@@ -54,7 +54,8 @@
       "Bash(grep -n lxml C:/Pochang/Tranding_AI/pyproject.toml C:/Pochang/Tranding_AI/requirements*.txt C:/Pochang/Tranding_AI/docker/Dockerfile)",
       "Bash(docker restart:*)",
       "Bash(gh api:*)",
-      "Bash(gh run:*)"
+      "Bash(gh run:*)",
+      "WebFetch(domain:tranding-ai.streamlit.app)"
     ]
   }
 }
