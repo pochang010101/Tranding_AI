@@ -1,7 +1,10 @@
-"""P-02 盤前分析 — 美股收盤、代表股、台指期參考、缺口預測。"""
+"""P-02 盤前分析 — 國際行情 + 台指期 + ADR + 資金流向 + 產業題材。"""
 
 from __future__ import annotations
 
+import logging
+
+import pandas as pd
 import streamlit as st
 
 from atlas.presentation.components.charts import bar_chart, gauge_chart
@@ -12,115 +15,139 @@ from atlas.presentation.service_container import (
     get_indicator_lib,
 )
 
+logger = logging.getLogger(__name__)
+
+# 台股重要 ADR
+_ADR_TICKERS = [
+    ("TSM", "台積電"),
+    ("UMC", "聯電"),
+    ("ASX", "日月光"),
+    ("IMOS", "奇鋐"),
+]
+
+
+def _pct_change(quote: dict) -> float:
+    """從 quote dict 計算漲跌%。"""
+    price = quote.get("price", 0)
+    prev = quote.get("prev_close", 0)
+    if not prev:
+        return 0.0
+    return (price - prev) / prev * 100
+
 
 def render() -> None:
     st.title("🌏 盤前分析")
     st.markdown("""
 <div class="legend-box">
-<strong>欄位說明</strong><br>
-<span class="legend-good">國際行情</span>：美股（道璨/S&amp;P/NASDAQ/費半）漲跌直接影響台股開盤方向，費半對台灣科技股尤為關鍵<br>
-<span class="legend-warn">缺口預測</span>：預估今日開盤價相對昨日收盤的跳空幅度<br>
-&nbsp;&nbsp;• 計算因子：費半漲跌＋台指期夜盤＋台積電ADR折溢傹＋匯率動向<br>
-&nbsp;&nbsp;• <span class="legend-good">&gt;+0.5%</span> 跳空高開（追多風險高，等拉回再買；持有者觀察缺口是否回補）<br>
-&nbsp;&nbsp;• <span class="legend-bad">&lt;-0.5%</span> 跳空低開（恐慌殺盤=撿便宜機會；弱勢股可能加速破底）<br>
-&nbsp;&nbsp;• ±0.5% 內為平盤區間，依個股操作<br>
-&nbsp;&nbsp;• <strong>實質意義</strong>：讓你在 9:00 開盤前就掌握今日方向，提前規劃委託策略<br>
-<span class="legend-warn">環境評估</span>：整合國際行情判斷今日操作環境 — <span class="legend-good">偏多（積極操作）</span>、<span class="legend-bad">偏空（保守觀望）</span>、<span class="legend-warn">中性（選股為主）</span><br>
-<span class="legend-warn">情緒分數（RSI）</span>：大盤 RSI 反映市場整體恐懼/貪婪程度，影響部位積極度與停損設定<br>
+<strong>使用方式</strong>：盤前 08:00~09:00 瀏覽本頁，掌握今日操作方向<br>
+<span class="legend-good">國際行情</span>：美股四大指數 + 台指期夜盤，判斷今日台股開盤基調<br>
+<span class="legend-warn">ADR 折溢價</span>：台積電等 ADR 隔夜表現，預估權值股方向<br>
+<span class="legend-warn">缺口預測</span>：綜合費半 + 台指期 + ADR 估算開盤跳空幅度<br>
+&nbsp;&nbsp;• <span class="legend-good">&gt;+0.5%</span> 跳空高開（追多風險高，等拉回）
+&nbsp;&nbsp;• <span class="legend-bad">&lt;-0.5%</span> 跳空低開（恐慌殺盤=撿便宜機會）<br>
+<span class="legend-good">資金流向</span>：昨日三大法人買賣超金額，判斷籌碼方向<br>
+<span class="legend-good">產業題材</span>：熱門題材熱度排行，決定今日聚焦哪些族群<br>
 <strong>顏色慣例</strong>：<span class="legend-good">紅色=漲/正面</span>、<span class="legend-bad">綠色=跌/負面</span>（台股標準）
 </div>
 """, unsafe_allow_html=True)
     get_colors()
 
-    # ── 美股四大指數（即時 yfinance）────────────
-    st.subheader("美股四大指數")
-    c1, c2, c3, c4 = st.columns(4)
-    us_indices = [
-        ("道瓊 DJI", "^DJI"),
+    # ══════════════════════════════════════════════
+    # Section 1: 美股四大指數 + 台指期
+    # ══════════════════════════════════════════════
+    st.subheader("美股四大指數 + 台指期")
+    indices = [
+        ("道瓊", "^DJI"),
         ("S&P 500", "^GSPC"),
         ("NASDAQ", "^IXIC"),
         ("費半 SOX", "^SOX"),
+        ("台指期", "TWF"),
     ]
-    for col, (name, ticker) in zip([c1, c2, c3, c4], us_indices, strict=False):
+    cols = st.columns(len(indices))
+    for col, (name, ticker) in zip(cols, indices, strict=False):
         with col:
             try:
                 q = fetch_stock_quote(ticker)
                 price = q["price"]
-                prev = q["prev_close"]
-                chg = (price - prev) / prev * 100 if prev else 0
+                chg = _pct_change(q)
                 st.markdown(metric_card(
                     name, f"{price:,.0f}", f"{chg:+.2f}%",
-                    "positive" if chg > 0 else "negative" if chg < 0 else "neutral"
+                    "positive" if chg > 0 else "negative" if chg < 0 else "neutral",
                 ), unsafe_allow_html=True)
             except Exception:
-                st.markdown(metric_card(name, "—", status="neutral"), unsafe_allow_html=True)
+                st.markdown(metric_card(name, "—", status="neutral"),
+                            unsafe_allow_html=True)
 
-    # ── 代表性美股 ──────────────────────────────
+    # ══════════════════════════════════════════════
+    # Section 2: ADR 表現 + 缺口預測
+    # ══════════════════════════════════════════════
     st.divider()
-    st.subheader("8 檔代表性美股")
-    us_stocks = [
-        ("AAPL", "Apple"), ("NVDA", "NVIDIA"), ("TSM", "台積電ADR"),
-        ("MSFT", "Microsoft"), ("GOOGL", "Google"), ("AMZN", "Amazon"),
-        ("META", "Meta"), ("AVGO", "Broadcom"),
-    ]
-    stock_data = {"代碼": [], "名稱": [], "收盤價": [], "漲跌%": []}
-    for ticker, name in us_stocks:
-        try:
-            q = fetch_stock_quote(ticker)
-            price = q["price"]
-            prev = q["prev_close"]
-            chg = (price - prev) / prev * 100 if prev else 0
-            stock_data["代碼"].append(ticker)
-            stock_data["名稱"].append(name)
-            stock_data["收盤價"].append(f"{price:,.1f}")
-            stock_data["漲跌%"].append(round(chg, 2))
-        except Exception:
-            continue
+    col_left, col_right = st.columns(2)
 
-    if stock_data["代碼"]:
-        st.dataframe(stock_data, width="stretch", hide_index=True,
-                     column_config={"漲跌%": st.column_config.NumberColumn(format="%+.1f%%")})
+    with col_left:
+        st.subheader("台股 ADR 隔夜表現")
+        adr_rows: list[dict] = []
+        for ticker, name in _ADR_TICKERS:
+            try:
+                q = fetch_stock_quote(ticker)
+                chg = _pct_change(q)
+                adr_rows.append({
+                    "代碼": ticker,
+                    "名稱": name,
+                    "收盤 (USD)": f"{q['price']:.2f}",
+                    "漲跌%": round(chg, 2),
+                })
+            except Exception:
+                adr_rows.append({"代碼": ticker, "名稱": name, "收盤 (USD)": "—", "漲跌%": 0.0})
 
-    # ── 台股指數 + 大盤環境 ──────────────────────
-    st.divider()
-    col_a, col_b = st.columns(2)
+        if adr_rows:
+            st.dataframe(
+                pd.DataFrame(adr_rows),
+                width="stretch", hide_index=True,
+                column_config={
+                    "漲跌%": st.column_config.NumberColumn(format="%+.2f%%"),
+                },
+            )
 
-    with col_a:
-        st.subheader("台股加權指數")
-        try:
-            tw_q = fetch_stock_quote("^TWII")
-            tw_price = tw_q["price"]
-            tw_prev = tw_q["prev_close"]
-            tw_chg = (tw_price - tw_prev) / tw_prev * 100 if tw_prev else 0
-            st.markdown(metric_card("加權指數", f"{tw_price:,.0f}",
-                        f"{tw_chg:+.2f}%",
-                        "positive" if tw_chg > 0 else "negative"),
-                        unsafe_allow_html=True)
-        except Exception:
-            st.markdown(metric_card("加權指數", "—", status="neutral"),
-                        unsafe_allow_html=True)
-
-        # 缺口預測因子
-        st.subheader("缺口預測因子")
-        factors = ["費半指數", "S&P500", "NASDAQ", "台積ADR"]
+    with col_right:
+        st.subheader("缺口預測")
         try:
             sox_q = fetch_stock_quote("^SOX")
-            sp_q = fetch_stock_quote("^GSPC")
-            nq_q = fetch_stock_quote("^IXIC")
             tsm_q = fetch_stock_quote("TSM")
-            factor_chgs = [
-                (sox_q["price"] - sox_q["prev_close"]) / sox_q["prev_close"] * 100 if sox_q["prev_close"] else 0,
-                (sp_q["price"] - sp_q["prev_close"]) / sp_q["prev_close"] * 100 if sp_q["prev_close"] else 0,
-                (nq_q["price"] - nq_q["prev_close"]) / nq_q["prev_close"] * 100 if nq_q["prev_close"] else 0,
-                (tsm_q["price"] - tsm_q["prev_close"]) / tsm_q["prev_close"] * 100 if tsm_q["prev_close"] else 0,
-            ]
-            fig = bar_chart(factors, [round(v, 2) for v in factor_chgs],
-                           title="各因子漲跌幅 %", color_by_value=True, height=300)
+            twf_q = fetch_stock_quote("TWF")
+
+            sox_chg = _pct_change(sox_q)
+            tsm_chg = _pct_change(tsm_q)
+            twf_chg = _pct_change(twf_q)
+
+            # 加權預估：費半 40% + 台積ADR 30% + 台指期 30%
+            gap_est = sox_chg * 0.4 + tsm_chg * 0.3 + twf_chg * 0.3
+
+            if gap_est > 0.5:
+                gap_status, gap_text = "positive", "偏多高開"
+            elif gap_est < -0.5:
+                gap_status, gap_text = "negative", "偏空低開"
+            else:
+                gap_status, gap_text = "neutral", "平盤附近"
+
+            st.markdown(metric_card("預估缺口", f"{gap_est:+.2f}%", gap_text, gap_status),
+                        unsafe_allow_html=True)
+
+            factors = ["費半", "台積ADR", "台指期"]
+            factor_vals = [round(sox_chg, 2), round(tsm_chg, 2), round(twf_chg, 2)]
+            fig = bar_chart(factors, factor_vals,
+                            title="缺口因子漲跌 %", color_by_value=True, height=250)
             st.plotly_chart(fig, width="stretch")
         except Exception:
-            st.info("因子資料載入中...")
+            st.info("缺口因子資料載入中...")
 
-    with col_b:
+    # ══════════════════════════════════════════════
+    # Section 3: 大盤環境 + 市場情緒
+    # ══════════════════════════════════════════════
+    st.divider()
+    col_env, col_sent = st.columns(2)
+
+    with col_env:
         st.subheader("大盤環境")
         idx_df = fetch_stock_data("^TWII", "3mo")
         if idx_df is not None and not idx_df.empty:
@@ -143,8 +170,169 @@ def render() -> None:
                 st.markdown(metric_card("趨勢", "盤整", status="neutral"),
                             unsafe_allow_html=True)
 
+            # 成交金額（億元）
+            if "volume" in idx_df.columns and len(idx_df) >= 1:
+                last_vol = idx_df["volume"].iloc[-1]
+                vol_billion = last_vol / 1e8  # 成交金額（億元）
+                if vol_billion > 3000:
+                    vol_status, vol_hint = "positive", "市場熱絡"
+                elif vol_billion > 2000:
+                    vol_status, vol_hint = "neutral", "正常水位"
+                else:
+                    vol_status, vol_hint = "negative", "量能不足"
+                st.markdown(metric_card("成交金額", f"{vol_billion:,.0f} 億", vol_hint, vol_status),
+                            unsafe_allow_html=True)
+        else:
+            st.info("台股資料載入中...")
+
+    with col_sent:
+        st.subheader("市場情緒")
+        if idx_df is not None and not idx_df.empty:
             rsi = ind["RSI14"].iloc[-1] if "RSI14" in ind.columns else 50
-            rsi = int(rsi) if rsi == rsi else 50
-            st.subheader("市場情緒")
+            rsi = int(rsi) if rsi == rsi else 50  # NaN guard
             fig = gauge_chart(rsi, title="RSI 情緒指數", height=250)
             st.plotly_chart(fig, width="stretch")
+
+            if rsi >= 70:
+                st.warning("⚠️ 極度貪婪區間，留意追高風險")
+            elif rsi <= 30:
+                st.success("💡 極度恐懼區間，逆勢佈局機會")
+            elif rsi >= 60:
+                st.info("偏多格局，順勢操作")
+            elif rsi <= 40:
+                st.info("偏空格局，保守為主")
+
+    # ══════════════════════════════════════════════
+    # Section 4: 昨日三大法人資金流向
+    # ══════════════════════════════════════════════
+    st.divider()
+    st.subheader("昨日三大法人資金流向")
+
+    try:
+        from atlas.infrastructure.twse_bulk import fetch_twse_institutional
+
+        df_inst = fetch_twse_institutional()
+        if not df_inst.empty:
+            foreign_total = df_inst["foreign_net"].sum()
+            trust_total = df_inst["trust_net"].sum()
+            dealer_total = df_inst["dealer_net"].sum()
+            total_3inst = foreign_total + trust_total + dealer_total
+
+            # 轉為億元（原始單位：股，用估算均價 50 元計算金額）
+            # 更精確：直接除 1e8 當作元→億元近似（法人 net 是股數 × 概念）
+            def _to_billion(val: int) -> float:
+                return val / 1e4 / 1e4  # 股→萬股→億股，但法人是金額概念... 用張數更直覺
+
+            # 實際上 T86 的 net 單位是「股」，轉張再顯示
+            f_lots = foreign_total // 1000
+            t_lots = trust_total // 1000
+            d_lots = dealer_total // 1000
+            total_lots = total_3inst // 1000
+
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                st.markdown(metric_card(
+                    "外資", f"{f_lots:+,.0f} 張", "",
+                    "positive" if f_lots > 0 else "negative",
+                ), unsafe_allow_html=True)
+            with c2:
+                st.markdown(metric_card(
+                    "投信", f"{t_lots:+,.0f} 張", "",
+                    "positive" if t_lots > 0 else "negative",
+                ), unsafe_allow_html=True)
+            with c3:
+                st.markdown(metric_card(
+                    "自營商", f"{d_lots:+,.0f} 張", "",
+                    "positive" if d_lots > 0 else "negative",
+                ), unsafe_allow_html=True)
+            with c4:
+                st.markdown(metric_card(
+                    "合計", f"{total_lots:+,.0f} 張", "",
+                    "positive" if total_lots > 0 else "negative",
+                ), unsafe_allow_html=True)
+
+            # 外資買超/賣超 Top 5
+            col_buy, col_sell = st.columns(2)
+            with col_buy:
+                st.markdown("**外資買超 Top 5**")
+                top_buy = (df_inst.nlargest(5, "foreign_net")
+                           [["code", "name", "foreign_net"]]
+                           .copy())
+                top_buy["foreign_net"] = top_buy["foreign_net"] // 1000
+                top_buy.columns = ["代碼", "名稱", "淨買超(張)"]
+                st.dataframe(top_buy, width="stretch", hide_index=True)
+            with col_sell:
+                st.markdown("**外資賣超 Top 5**")
+                top_sell = (df_inst.nsmallest(5, "foreign_net")
+                            [["code", "name", "foreign_net"]]
+                            .copy())
+                top_sell["foreign_net"] = top_sell["foreign_net"] // 1000
+                top_sell.columns = ["代碼", "名稱", "淨賣超(張)"]
+                st.dataframe(top_sell, width="stretch", hide_index=True)
+        else:
+            st.info("法人資料尚未更新")
+    except Exception as exc:
+        logger.warning("法人資料載入失敗: %s", exc)
+        st.info("法人資料載入中...")
+
+    # ══════════════════════════════════════════════
+    # Section 5: 產業題材熱度
+    # ══════════════════════════════════════════════
+    st.divider()
+    st.subheader("產業題材熱度排行")
+
+    try:
+        from atlas.infrastructure.twse_bulk import fetch_twse_daily_all
+        from atlas.strategy.theme_catalog import detect_hot_themes
+
+        df_daily = fetch_twse_daily_all()
+        if not df_daily.empty:
+            hot_themes = detect_hot_themes(df_daily, top_n=15)
+            if hot_themes:
+                theme_rows = []
+                for t in hot_themes:
+                    if t.heat_score >= 50:
+                        heat_label = "🔥 熱門"
+                    elif t.heat_score >= 30:
+                        heat_label = "📈 溫和"
+                    else:
+                        heat_label = "➖ 冷門"
+                    theme_rows.append({
+                        "題材": t.name,
+                        "熱度": t.heat_score,
+                        "狀態": heat_label,
+                        "成分股數": t.stock_count,
+                        "上漲比例": f"{t.up_count}/{t.stock_count}",
+                        "平均漲幅%": round(t.avg_change_pct, 2),
+                        "領漲股": ", ".join(t.top_stocks[:3]) if t.top_stocks else "—",
+                    })
+
+                df_themes = pd.DataFrame(theme_rows)
+                st.dataframe(
+                    df_themes,
+                    width="stretch", hide_index=True,
+                    column_config={
+                        "熱度": st.column_config.ProgressColumn(
+                            min_value=0, max_value=100, format="%d",
+                        ),
+                        "平均漲幅%": st.column_config.NumberColumn(format="%+.2f%%"),
+                    },
+                )
+
+                # 熱度長條圖
+                fig = bar_chart(
+                    [t.name for t in hot_themes],
+                    [t.heat_score for t in hot_themes],
+                    title="題材熱度分數",
+                    horizontal=True,
+                    color_by_value=False,
+                    height=350,
+                )
+                st.plotly_chart(fig, width="stretch")
+            else:
+                st.info("無題材熱度資料")
+        else:
+            st.info("行情資料尚未更新")
+    except Exception as exc:
+        logger.warning("題材熱度載入失敗: %s", exc)
+        st.info("題材資料載入中...")
