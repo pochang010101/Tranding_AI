@@ -42,8 +42,11 @@ def _find_trading_date(start: date, max_lookback: int = 7) -> date:
 last_trading_date: date | None = None
 
 
+_twse_daily_cache: dict[date, pd.DataFrame] = {}
+
+
 def fetch_twse_daily_all(dt: date | None = None) -> pd.DataFrame:
-    """取得 TWSE 全市場當日收盤行情。
+    """取得 TWSE 全市場當日收盤行情（同日期快取）。
 
     非交易日（假日/週末）自動往前回退，最多 7 天。
 
@@ -52,6 +55,9 @@ def fetch_twse_daily_all(dt: date | None = None) -> pd.DataFrame:
     """
     global last_trading_date
     start_dt = dt or _find_trading_date(date.today())
+    cache_key = start_dt
+    if cache_key in _twse_daily_cache:
+        return _twse_daily_cache[cache_key]
     max_retries = 1 if dt else 7  # 指定日期只試一次，自動模式往前找 7 天
 
     for attempt in range(max_retries):
@@ -142,7 +148,11 @@ def fetch_twse_daily_all(dt: date | None = None) -> pd.DataFrame:
 
     df = pd.DataFrame(records)
     logger.info("TWSE daily: fetched %d stocks for %s", len(df), date_str)
+    _twse_daily_cache[cache_key] = df
     return df
+
+
+_twse_inst_cache: dict[date, pd.DataFrame] = {}
 
 
 def fetch_twse_institutional(dt: date | None = None) -> pd.DataFrame:
@@ -155,6 +165,8 @@ def fetch_twse_institutional(dt: date | None = None) -> pd.DataFrame:
     """
     # 使用 last_trading_date 確保與行情資料同一天
     dt = dt or last_trading_date or _find_trading_date(date.today())
+    if dt in _twse_inst_cache:
+        return _twse_inst_cache[dt]
     date_str = dt.strftime("%Y%m%d")
 
     try:
@@ -226,11 +238,20 @@ def fetch_twse_institutional(dt: date | None = None) -> pd.DataFrame:
 
     df = pd.DataFrame(records)
     logger.info("TWSE institutional: fetched %d stocks for %s", len(df), date_str)
+    _twse_inst_cache[dt] = df
     return df
 
 
+_disposition_cache: set[str] | None = None
+_disposition_cache_date: date | None = None
+
+
 def fetch_disposition_list() -> set[str]:
-    """取得目前處置股代碼清單。"""
+    """取得目前處置股代碼清單（同一天快取，不重複呼叫）。"""
+    global _disposition_cache, _disposition_cache_date
+    today = date.today()
+    if _disposition_cache is not None and _disposition_cache_date == today:
+        return _disposition_cache
     try:
         resp = httpx.get(
             "https://www.twse.com.tw/announcement/punish",
@@ -246,15 +267,22 @@ def fetch_disposition_list() -> set[str]:
             if code.isdigit() and len(code) == 4:
                 codes.add(code)
         logger.info("Disposition list: %d stocks", len(codes))
+        _disposition_cache = codes
+        _disposition_cache_date = today
         return codes
     except Exception as exc:
         logger.warning("Disposition list fetch failed: %s", exc)
         return set()
 
 
+_tpex_daily_cache: dict[date, pd.DataFrame] = {}
+
+
 def fetch_tpex_daily_all(dt: date | None = None) -> pd.DataFrame:
-    """取得 TPEx (上櫃) 全市場當日收盤行情。"""
+    """取得 TPEx (上櫃) 全市場當日收盤行情（同日期快取）。"""
     dt = dt or last_trading_date or _find_trading_date(date.today())
+    if dt in _tpex_daily_cache:
+        return _tpex_daily_cache[dt]
     # TPEx uses ROC year
     roc_year = dt.year - 1911
     date_str = f"{roc_year}/{dt.month:02d}/{dt.day:02d}"
@@ -317,12 +345,18 @@ def fetch_tpex_daily_all(dt: date | None = None) -> pd.DataFrame:
 
     df = pd.DataFrame(records)
     logger.info("TPEx daily: fetched %d stocks for %s", len(df), date_str)
+    _tpex_daily_cache[dt] = df
     return df
+
+
+_tpex_inst_cache: dict[date, pd.DataFrame] = {}
 
 
 def fetch_tpex_institutional(dt: date | None = None) -> pd.DataFrame:
     """取得 TPEx 三大法人全市場買賣超。"""
     dt = dt or last_trading_date or _find_trading_date(date.today())
+    if dt in _tpex_inst_cache:
+        return _tpex_inst_cache[dt]
     roc_year = dt.year - 1911
     date_str = f"{roc_year}/{dt.month:02d}/{dt.day:02d}"
 
@@ -399,4 +433,5 @@ def fetch_tpex_institutional(dt: date | None = None) -> pd.DataFrame:
 
     df = pd.DataFrame(records)
     logger.info("TPEx institutional: fetched %d stocks for %s", len(df), date_str)
+    _tpex_inst_cache[dt] = df
     return df

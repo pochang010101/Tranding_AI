@@ -72,8 +72,17 @@ class UniverseManager(IUniverseManager):
         l1_pass = [(c, p, v) for c, p, v in candidates if v >= min_vol and p >= min_price]
         stats["layer1_liquidity"] = {"passed": len(l1_pass), "rejected": total - len(l1_pass)}
 
-        # L2 技術面（處置/警示排除 — 需 stock 表，這裡簡化為全部通過）
-        l2_pass = l1_pass
+        # L2 處置/警示排除
+        if market == MarketType.TW:
+            from atlas.infrastructure.twse_bulk import fetch_disposition_list
+            try:
+                disposition = fetch_disposition_list()
+            except Exception as exc:
+                logger.warning("Failed to fetch disposition list, skipping L2: %s", exc)
+                disposition = set()
+            l2_pass = [(c, p, v) for c, p, v in l1_pass if c not in disposition]
+        else:
+            l2_pass = l1_pass
         stats["layer2_technical"] = {"passed": len(l2_pass), "rejected": len(l1_pass) - len(l2_pass)}
 
         # L3 策略適性（非冷門股 — 用量 > 10 萬股的簡化判斷）
