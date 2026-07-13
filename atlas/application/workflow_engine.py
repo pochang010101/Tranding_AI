@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import subprocess
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -329,7 +328,7 @@ class WorkflowEngine(IWorkflowEngine):
             else:
                 logger.error("backup_db failed (rc=%d):\n%s", proc.returncode, output)
                 return {"status": "failed", "returncode": proc.returncode, "output": output[-500:]}
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error("backup_db timed out after 300s")
             return {"status": "timeout"}
         except Exception as exc:
@@ -358,7 +357,7 @@ class WorkflowEngine(IWorkflowEngine):
             else:
                 logger.error("retrain_model failed (rc=%d):\n%s", proc.returncode, output)
                 return {"status": "failed", "returncode": proc.returncode, "output": output[-500:]}
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error("retrain_model timed out after 1800s")
             return {"status": "timeout"}
         except Exception as exc:
@@ -446,10 +445,7 @@ class WorkflowEngine(IWorkflowEngine):
         elif workflow_name == "monthly_rebuild":
             lines.append(f"股票池: {result.get('universe_size', 0)} 檔")
 
-        elif workflow_name == "backup_db":
-            lines.append(f"狀態: {result.get('status', '?')}")
-
-        elif workflow_name == "retrain_model":
+        elif workflow_name == "backup_db" or workflow_name == "retrain_model":
             lines.append(f"狀態: {result.get('status', '?')}")
 
         return "\n".join(lines)

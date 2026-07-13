@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-from atlas.presentation.components.theme import get_colors, metric_card, regime_badge
 from atlas.presentation.components.charts import bar_chart, gauge_chart
-from atlas.presentation.service_container import fetch_stock_quote, fetch_stock_data, get_indicator_lib
+from atlas.presentation.components.theme import get_colors, metric_card, regime_badge
+from atlas.presentation.service_container import (
+    fetch_stock_data,
+    fetch_stock_quote,
+    get_indicator_lib,
+)
 
 
 def render() -> None:
@@ -26,7 +30,7 @@ def render() -> None:
 <strong>顏色慣例</strong>：<span class="legend-good">紅色=漲/正面</span>、<span class="legend-bad">綠色=跌/負面</span>（台股標準）
 </div>
 """, unsafe_allow_html=True)
-    c = get_colors()
+    get_colors()
 
     # ── 美股四大指數（即時 yfinance）────────────
     st.subheader("美股四大指數")
@@ -37,7 +41,7 @@ def render() -> None:
         ("NASDAQ", "^IXIC"),
         ("費半 SOX", "^SOX"),
     ]
-    for col, (name, ticker) in zip([c1, c2, c3, c4], us_indices):
+    for col, (name, ticker) in zip([c1, c2, c3, c4], us_indices, strict=False):
         with col:
             try:
                 q = fetch_stock_quote(ticker)

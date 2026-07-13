@@ -86,7 +86,7 @@ class BreadthService(IBreadthService):
         簡化版：比較最近兩次寬度分數的方向與大盤走向是否相反。
         """
         end = date.today()
-        start = end - timedelta(days=lookback_days + 10)
+        end - timedelta(days=lookback_days + 10)
 
         # 需要歷史每日寬度，目前回傳 no divergence
         logger.debug("Divergence detection: lookback=%d", lookback_days)

@@ -8,7 +8,7 @@ import tempfile
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
-from atlas.enums import ConclusionLevel, ConfidenceLevel, MarketType
+from atlas.enums import ConclusionLevel, MarketType
 from atlas.interfaces.application import IScreenerEngine
 from atlas.models.scoring import ScanResult
 
@@ -163,26 +163,27 @@ class ScreenerEngine(IScreenerEngine):
 
     async def export_csv(self, results: list[ScanResult]) -> str:
         """匯出掃描結果為 CSV。"""
-        tmp = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             mode="w", suffix=".csv", delete=False, encoding="utf-8-sig", newline=""
-        )
-        writer = csv.writer(tmp)
-        writer.writerow([
-            "Rank", "Code", "Name", "Market",
-            "Industry_Rotation", "Catalyst", "Fund_Flow", "RS", "Total_Score",
-            "Technical", "Fundamental", "Institutional", "Qualified",
-            "Conclusion", "Scan_Date",
-        ])
-        for r in results:
-            a = r.axis_score
-            asp = r.aspect
+        ) as tmp:
+            writer = csv.writer(tmp)
             writer.writerow([
-                r.rank, r.code, r.name, r.market.value,
-                a.industry_rotation, a.catalyst, a.fund_flow, a.relative_strength, a.total_score,
-                asp.technical.value, asp.fundamental.value, asp.institutional.value,
-                asp.is_qualified,
-                r.conclusion.name, r.scan_date.isoformat(),
+                "Rank", "Code", "Name", "Market",
+                "Industry_Rotation", "Catalyst", "Fund_Flow", "RS", "Total_Score",
+                "Technical", "Fundamental", "Institutional", "Qualified",
+                "Conclusion", "Scan_Date",
             ])
-        tmp.close()
-        logger.info("Scan results exported to %s", tmp.name)
-        return tmp.name
+            for r in results:
+                a = r.axis_score
+                asp = r.aspect
+                writer.writerow([
+                    r.rank, r.code, r.name, r.market.value,
+                    a.industry_rotation, a.catalyst, a.fund_flow, a.relative_strength,
+                    a.total_score,
+                    asp.technical.value, asp.fundamental.value, asp.institutional.value,
+                    asp.is_qualified,
+                    r.conclusion.name, r.scan_date.isoformat(),
+                ])
+            tmp_name = tmp.name
+        logger.info("Scan results exported to %s", tmp_name)
+        return tmp_name

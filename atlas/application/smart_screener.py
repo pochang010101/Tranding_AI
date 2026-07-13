@@ -13,7 +13,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
 
 import pandas as pd
 
@@ -268,7 +267,7 @@ class SmartScreener:
             # 台股代碼：上市用 .TW、上櫃用 .TWO
             if otc_flags is None:
                 otc_flags = [False] * len(codes)
-            tickers = [f"{c}.TWO" if is_otc else f"{c}.TW" for c, is_otc in zip(codes, otc_flags)]
+            tickers = [f"{c}.TWO" if is_otc else f"{c}.TW" for c, is_otc in zip(codes, otc_flags, strict=False)]
             # 下載 30 天歷史（確保有 14 天有效資料）
             data = yf.download(
                 tickers, period="30d", progress=False, threads=True, auto_adjust=True
@@ -276,7 +275,7 @@ class SmartScreener:
 
             close_df = data["Close"] if "Close" in data.columns.get_level_values(0) else data
 
-            for i, code in enumerate(codes):
+            for i, _code in enumerate(codes):
                 ticker = tickers[i]
                 try:
                     if ticker in close_df.columns:

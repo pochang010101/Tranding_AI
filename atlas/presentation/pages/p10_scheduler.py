@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import streamlit as st
+
 import pandas as pd
+import streamlit as st
 
 from atlas.presentation.components.theme import get_colors, metric_card
 from atlas.presentation.service_container import get_scheduler, get_workflow_engine
@@ -22,7 +23,7 @@ def render() -> None:
 <b>非交易日</b>：週末/假日自動跳過（monthly_rebuild 除外）
 </div>
 """, unsafe_allow_html=True)
-    c = get_colors()
+    get_colors()
 
     scheduler = get_scheduler()
     wf_engine = get_workflow_engine()

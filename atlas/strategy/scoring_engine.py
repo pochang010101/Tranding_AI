@@ -306,6 +306,7 @@ class ScoringEngine(IScoringEngine):
             if self._smart_money:
                 try:
                     import pandas as pd
+
                     from atlas.strategy.smart_money_phase import SmartMoneyPhase
                     end = date.today()
                     start = end - timedelta(days=60)

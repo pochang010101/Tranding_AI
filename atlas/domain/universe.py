@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections import Counter
 from datetime import date
 from typing import TYPE_CHECKING, Any
 

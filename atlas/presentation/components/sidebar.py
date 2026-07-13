@@ -83,7 +83,7 @@ def render_sidebar() -> str:
 
     st.markdown('<div class="nav-container">', unsafe_allow_html=True)
     cols = st.columns(len(PAGES))
-    for col, (key, icon, label) in zip(cols, PAGES):
+    for col, (key, icon, label) in zip(cols, PAGES, strict=False):
         with col:
             btn_type = "primary" if current == key else "secondary"
             if st.button(f"{icon}{label}", key=f"nav_{key}", type=btn_type,

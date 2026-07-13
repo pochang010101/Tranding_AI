@@ -6,11 +6,9 @@ import logging
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
-from plotly.subplots import make_subplots
 
-from atlas.presentation.components.charts import _apply_layout, gauge_chart
+from atlas.presentation.components.charts import gauge_chart
 from atlas.presentation.components.theme import get_colors, metric_card
 from atlas.presentation.service_container import (
     TW_TOP_STOCKS,

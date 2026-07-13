@@ -10,10 +10,7 @@ import streamlit as st
 from atlas.presentation.components.charts import bar_chart
 from atlas.presentation.components.theme import get_colors, metric_card
 from atlas.presentation.service_container import (
-    TW_TOP_STOCKS,
-    fetch_stock_data,
     fetch_stock_quote,
-    get_indicator_lib,
 )
 
 
@@ -28,7 +25,7 @@ def render() -> None:
 <span class="legend-warn">方向</span>：<span class="legend-good">BUY 買入訊號</span>、<span class="legend-bad">SELL 賣出/警示訊號</span>、<span class="legend-warn">ALERT 中性警示</span>
 </div>
 """, unsafe_allow_html=True)
-    c = get_colors()
+    get_colors()
 
     # ── 雷達狀態 ────────────────────────────────
     radar_running: bool = st.session_state.get("radar_running", False)
@@ -103,7 +100,7 @@ def render() -> None:
         st.subheader("偵測器觸發統計")
         if signals:
             det_counter = Counter(s.get("detector", "") for s in signals if s.get("detector"))
-            det_names, det_counts = zip(*det_counter.most_common(10)) if det_counter else ([], [])
+            det_names, det_counts = zip(*det_counter.most_common(10), strict=False) if det_counter else ([], [])
             fig = bar_chart(list(det_names), list(det_counts), title="今日觸發次數",
                             horizontal=True, height=350)
             st.plotly_chart(fig, width="stretch")
@@ -114,7 +111,7 @@ def render() -> None:
         st.subheader("熱門標的")
         if signals:
             code_counter = Counter(s.get("code", "") for s in signals if s.get("code"))
-            hot_codes, hot_counts = zip(*code_counter.most_common(10)) if code_counter else ([], [])
+            hot_codes, hot_counts = zip(*code_counter.most_common(10), strict=False) if code_counter else ([], [])
             fig = bar_chart(list(hot_codes), list(hot_counts), title="觸發次數 by 標的",
                             horizontal=True, height=350)
             st.plotly_chart(fig, width="stretch")

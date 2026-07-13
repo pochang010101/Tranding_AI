@@ -6,14 +6,11 @@ from abc import ABC, abstractmethod
 from datetime import date
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-import numpy as np
 import pandas as pd
 
 from atlas.enums import (
     MarketType,
-    SignalType,
     StrategyCategory,
-    TimeFrame,
 )
 from atlas.models.signals import Signal
 

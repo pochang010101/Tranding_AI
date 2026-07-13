@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import streamlit as st
 import pandas as pd
-import numpy as np
+import streamlit as st
 
+from atlas.presentation.components.charts import bar_chart, equity_curve
 from atlas.presentation.components.theme import get_colors, metric_card
-from atlas.presentation.components.charts import equity_curve, bar_chart
 
 
 def render() -> None:
@@ -21,7 +20,7 @@ def render() -> None:
 🔄 <strong>委託狀態</strong>：已成交 = 模擬市價成交；持倉中 = 尚未平倉；交易紀錄保留完整進出場歷史。
 </div>
 """, unsafe_allow_html=True)
-    c = get_colors()
+    get_colors()
 
     # 初始化 session state
     if "pt_started" not in st.session_state:
@@ -44,7 +43,7 @@ def render() -> None:
             disabled=st.session_state["pt_started"],
         )
     with col_ctrl2:
-        risk_pct = st.slider("單筆風險 %", 0.5, 5.0, 2.0, 0.5)
+        st.slider("單筆風險 %", 0.5, 5.0, 2.0, 0.5)
     with col_ctrl3:
         st.write("")
         st.write("")
@@ -69,8 +68,8 @@ def render() -> None:
     current_equity = eq[-1] if eq else start_capital
     total_pnl = current_equity - start_capital
     return_pct = total_pnl / start_capital * 100 if start_capital else 0
-    open_count = len(st.session_state["pt_positions"])
-    order_count = len(st.session_state["pt_orders"])
+    len(st.session_state["pt_positions"])
+    len(st.session_state["pt_orders"])
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
@@ -158,26 +157,25 @@ def render() -> None:
                     sell_reason = st.text_input("賣出原因", key="pt_sell_reason",
                                               placeholder="停損/停利/訊號")
                 if st.button("確認賣出", type="primary", key="pt_confirm_sell",
-                            width="stretch"):
-                    if sell_price > 0:
-                        pos = st.session_state["pt_positions"][sel_idx]
-                        pnl = (sell_price - pos["進場價"]) * pos["張數"] * 1000
-                        tax = sell_price * pos["張數"] * 1000 * 0.003
-                        net_pnl = pnl - tax
-                        st.session_state["pt_orders"].append({
-                            "代碼": pos["代碼"],
-                            "方向": "賣出",
-                            "價格": sell_price,
-                            "張數": pos["張數"],
-                            "損益": round(net_pnl, 0),
-                            "原因": sell_reason,
-                            "狀態": "已成交",
-                        })
-                        eq = st.session_state["pt_equity_curve"]
-                        eq.append(eq[-1] + net_pnl)
-                        st.session_state["pt_positions"].pop(sel_idx)
-                        st.success(f"賣出 {pos['代碼']} 損益: ${net_pnl:+,.0f}")
-                        st.rerun()
+                            width="stretch") and sell_price > 0:
+                    pos = st.session_state["pt_positions"][sel_idx]
+                    pnl = (sell_price - pos["進場價"]) * pos["張數"] * 1000
+                    tax = sell_price * pos["張數"] * 1000 * 0.003
+                    net_pnl = pnl - tax
+                    st.session_state["pt_orders"].append({
+                        "代碼": pos["代碼"],
+                        "方向": "賣出",
+                        "價格": sell_price,
+                        "張數": pos["張數"],
+                        "損益": round(net_pnl, 0),
+                        "原因": sell_reason,
+                        "狀態": "已成交",
+                    })
+                    eq = st.session_state["pt_equity_curve"]
+                    eq.append(eq[-1] + net_pnl)
+                    st.session_state["pt_positions"].pop(sel_idx)
+                    st.success(f"賣出 {pos['代碼']} 損益: ${net_pnl:+,.0f}")
+                    st.rerun()
             else:
                 st.info("目前無持倉可賣出")
 
@@ -236,7 +234,7 @@ def render() -> None:
                         unsafe_allow_html=True)
 
         # 損益分佈
-        pnl_data = pd.DataFrame({"損益": pnls})
+        pd.DataFrame({"損益": pnls})
         fig = bar_chart(
             list(range(1, len(pnls) + 1)),
             pnls,

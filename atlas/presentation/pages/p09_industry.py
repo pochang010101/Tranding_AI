@@ -7,12 +7,11 @@ import logging
 import pandas as pd
 import streamlit as st
 
-from atlas.presentation.components.theme import get_colors, metric_card
 from atlas.presentation.components.charts import bar_chart, heatmap  # noqa: F401
+from atlas.presentation.components.theme import get_colors
 from atlas.presentation.service_container import (
     TW_TOP_STOCKS,
     fetch_stock_data,
-    get_indicator_lib,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,10 +44,10 @@ def _calc_industry_rs(stock_list: list[tuple[str, str]]) -> pd.DataFrame:
             close = df["close"]
             volume = df["volume"] if "volume" in df.columns else pd.Series(dtype=float)
 
-            def _ret(n: int) -> float:
-                if len(close) < n + 1:
+            def _ret(n: int, _close: pd.Series = close) -> float:
+                if len(_close) < n + 1:
                     return float("nan")
-                return float((close.iloc[-1] - close.iloc[-n - 1]) / close.iloc[-n - 1] * 100)
+                return float((_close.iloc[-1] - _close.iloc[-n - 1]) / _close.iloc[-n - 1] * 100)
 
             # 資金流代理：最近 5 日每日 (price_change_direction * volume) 累加
             proxy_flow = 0.0

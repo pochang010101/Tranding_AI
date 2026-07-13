@@ -127,7 +127,7 @@ class BacktestEngine(IBacktestEngine):
 
         results: list[BacktestResult] = []
         for combo in combos:
-            params = dict(zip(keys, combo))
+            params = dict(zip(keys, combo, strict=False))
             try:
                 r = await self.run(
                     strategy_name, codes, market, start_date, end_date, params=params
@@ -226,13 +226,11 @@ class BacktestEngine(IBacktestEngine):
         position_open = False
         entry_price = 0.0
         entry_date = date.today()
-        entry_idx = 0
 
         for sig in signals:
             if sig.signal_type == SignalType.BUY and not position_open:
                 entry_price = sig.price
                 entry_date = sig.timestamp.date() if hasattr(sig.timestamp, "date") else date.today()
-                entry_idx = 0
                 position_open = True
             elif sig.signal_type == SignalType.SELL and position_open:
                 exit_price = sig.price

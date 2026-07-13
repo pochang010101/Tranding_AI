@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
-from datetime import date, datetime
+from datetime import date
 from typing import TYPE_CHECKING, Any
 
 from atlas.enums import DetectorType, MarketType, SignalType
@@ -63,10 +64,8 @@ class RealtimeRadar(IRealtimeRadar):
         self._running = False
         if self._task and not self._task.done():
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
         logger.info("Realtime radar stopped. Alerts=%d Signals=%d",
                      len(self._alerts_today), len(self._signals_today))
 

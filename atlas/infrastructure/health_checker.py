@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from atlas.enums import DataSourceHealth
 
@@ -75,7 +77,7 @@ class HealthChecker:
             raise KeyError(f"Unknown component: {name}")
 
         check_fn = self._check_fns[name]
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         start = time.perf_counter()
 
         try:
@@ -192,10 +194,8 @@ class HealthChecker:
         self._running = False
         if self._periodic_task and not self._periodic_task.done():
             self._periodic_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._periodic_task
-            except asyncio.CancelledError:
-                pass
         self._periodic_task = None
         logger.info("Periodic health check stopped")
 

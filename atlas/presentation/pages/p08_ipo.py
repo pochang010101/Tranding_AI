@@ -11,14 +11,12 @@ from atlas.presentation.components.charts import bar_chart
 from atlas.presentation.components.theme import get_colors, metric_card
 from atlas.presentation.service_container import (
     fetch_stock_quote,
-    fetch_stock_data,
-    get_indicator_lib,
 )
 
 
 def render() -> None:
     st.title("🆕 IPO 申購")
-    c = get_colors()
+    get_colors()
 
     # ── 即將申購（自動抓取）──────────────────────
     st.subheader("最近新上市/上櫃")
@@ -102,32 +100,31 @@ def render() -> None:
     else:
         st.info("目前無可申購的 IPO。可使用下方手動新增。")
 
-    with st.expander("➕ 手動新增申購候選", expanded=False):
-        with st.form("add_ipo_candidate"):
-            col1, col2 = st.columns(2)
-            with col1:
-                ipo_code = st.text_input("股票代碼", placeholder="例：6951")
-                ipo_name = st.text_input("公司名稱", placeholder="例：創新科技")
-                ipo_price = st.number_input("承銷價（元）", min_value=1.0, step=0.5, value=100.0)
-            with col2:
-                ipo_start = st.date_input("申購起日", value=date.today())
-                ipo_end = st.date_input("申購迄日", value=date.today())
-            submitted = st.form_submit_button("新增")
-            if submitted:
-                if not ipo_code or not ipo_name:
-                    st.error("代碼與名稱為必填欄位。")
-                else:
-                    candidates: list[dict] = st.session_state.get("ipo_candidates", [])
-                    candidates.append({
-                        "code": ipo_code.strip(),
-                        "name": ipo_name.strip(),
-                        "subscription_price": float(ipo_price),
-                        "start_date": str(ipo_start),
-                        "end_date": str(ipo_end),
-                    })
-                    st.session_state["ipo_candidates"] = candidates
-                    st.success(f"已新增 {ipo_code} {ipo_name}")
-                    st.rerun()
+    with st.expander("➕ 手動新增申購候選", expanded=False), st.form("add_ipo_candidate"):
+        col1, col2 = st.columns(2)
+        with col1:
+            ipo_code = st.text_input("股票代碼", placeholder="例：6951")
+            ipo_name = st.text_input("公司名稱", placeholder="例：創新科技")
+            ipo_price = st.number_input("承銷價（元）", min_value=1.0, step=0.5, value=100.0)
+        with col2:
+            ipo_start = st.date_input("申購起日", value=date.today())
+            ipo_end = st.date_input("申購迄日", value=date.today())
+        submitted = st.form_submit_button("新增")
+        if submitted:
+            if not ipo_code or not ipo_name:
+                st.error("代碼與名稱為必填欄位。")
+            else:
+                candidates: list[dict] = st.session_state.get("ipo_candidates", [])
+                candidates.append({
+                    "code": ipo_code.strip(),
+                    "name": ipo_name.strip(),
+                    "subscription_price": float(ipo_price),
+                    "start_date": str(ipo_start),
+                    "end_date": str(ipo_end),
+                })
+                st.session_state["ipo_candidates"] = candidates
+                st.success(f"已新增 {ipo_code} {ipo_name}")
+                st.rerun()
 
     candidates: list[dict] = st.session_state.get("ipo_candidates", [])
     if candidates:
@@ -175,32 +172,31 @@ def render() -> None:
     st.divider()
     st.subheader("蜜月期追蹤（上市 30 日內）")
 
-    with st.expander("➕ 新增追蹤", expanded=False):
-        with st.form("add_honeymoon"):
-            hm_col1, hm_col2 = st.columns(2)
-            with hm_col1:
-                hm_code = st.text_input("股票代碼", placeholder="例：6948", key="hm_code")
-                hm_name = st.text_input("公司名稱", placeholder="例：先進半導", key="hm_name")
-            with hm_col2:
-                hm_listing = st.date_input("上市日期", value=date.today(), key="hm_listing")
-                hm_sub_price = st.number_input(
-                    "承銷價（元）", min_value=1.0, step=0.5, value=100.0, key="hm_sub_price"
-                )
-            hm_submitted = st.form_submit_button("新增追蹤")
-            if hm_submitted:
-                if not hm_code or not hm_name:
-                    st.error("代碼與名稱為必填欄位。")
-                else:
-                    honeymoon: list[dict] = st.session_state.get("ipo_honeymoon", [])
-                    honeymoon.append({
-                        "code": hm_code.strip(),
-                        "name": hm_name.strip(),
-                        "listing_date": str(hm_listing),
-                        "subscription_price": float(hm_sub_price),
-                    })
-                    st.session_state["ipo_honeymoon"] = honeymoon
-                    st.success(f"已新增蜜月追蹤：{hm_code} {hm_name}")
-                    st.rerun()
+    with st.expander("➕ 新增追蹤", expanded=False), st.form("add_honeymoon"):
+        hm_col1, hm_col2 = st.columns(2)
+        with hm_col1:
+            hm_code = st.text_input("股票代碼", placeholder="例：6948", key="hm_code")
+            hm_name = st.text_input("公司名稱", placeholder="例：先進半導", key="hm_name")
+        with hm_col2:
+            hm_listing = st.date_input("上市日期", value=date.today(), key="hm_listing")
+            hm_sub_price = st.number_input(
+                "承銷價（元）", min_value=1.0, step=0.5, value=100.0, key="hm_sub_price"
+            )
+        hm_submitted = st.form_submit_button("新增追蹤")
+        if hm_submitted:
+            if not hm_code or not hm_name:
+                st.error("代碼與名稱為必填欄位。")
+            else:
+                honeymoon: list[dict] = st.session_state.get("ipo_honeymoon", [])
+                honeymoon.append({
+                    "code": hm_code.strip(),
+                    "name": hm_name.strip(),
+                    "listing_date": str(hm_listing),
+                    "subscription_price": float(hm_sub_price),
+                })
+                st.session_state["ipo_honeymoon"] = honeymoon
+                st.success(f"已新增蜜月追蹤：{hm_code} {hm_name}")
+                st.rerun()
 
     honeymoon: list[dict] = st.session_state.get("ipo_honeymoon", [])
     if honeymoon:

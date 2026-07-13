@@ -155,7 +155,7 @@ class MLEngine(IMLEngine):
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
 
-        importance = dict(zip(feature_cols, model.feature_importances_))
+        importance = dict(zip(feature_cols, model.feature_importances_, strict=False))
         top_10 = dict(sorted(importance.items(), key=lambda x: x[1], reverse=True)[:10])
 
         self._standalone_model = model
@@ -237,7 +237,7 @@ class MLEngine(IMLEngine):
         if self._standalone_model is None:
             raise RuntimeError("No standalone model available.")
         feature_cols = getattr(self, "_feature_cols", _ENGINEERED_FEATURES)
-        importance = dict(zip(feature_cols, self._standalone_model.feature_importances_))
+        importance = dict(zip(feature_cols, self._standalone_model.feature_importances_, strict=False))
         return dict(sorted(importance.items(), key=lambda x: x[1], reverse=True))
 
     async def predict_async(
@@ -257,7 +257,7 @@ class MLEngine(IMLEngine):
             proba = model.predict_proba(X)[0]
             pred_class = int(model.predict(X)[0])
 
-            importance = dict(zip(feature_cols, model.feature_importances_))
+            importance = dict(zip(feature_cols, model.feature_importances_, strict=False))
             top_features = dict(
                 sorted(importance.items(), key=lambda x: x[1], reverse=True)[:10]
             )
@@ -345,7 +345,7 @@ class MLEngine(IMLEngine):
         self._models[market] = model
         self._save_model(market, model)
 
-        importance = dict(zip(feature_cols, model.feature_importances_))
+        importance = dict(zip(feature_cols, model.feature_importances_, strict=False))
         top_10 = dict(sorted(importance.items(), key=lambda x: x[1], reverse=True)[:10])
 
         result = {

@@ -6,12 +6,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
 import streamlit as st
 
-from atlas.constants import OTC_CODES, is_otc as _is_otc  # noqa: F401
+from atlas.constants import OTC_CODES  # noqa: F401
+from atlas.constants import is_otc as _is_otc
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +116,7 @@ def get_portfolio_manager():
 def get_notification_hub():
     """根據環境變數初始化 NotificationHub + adapters。"""
     import os
+
     from atlas.infrastructure.notification_hub import NotificationHub
 
     hub = NotificationHub()
@@ -160,10 +163,9 @@ def get_ml_engine():
     from atlas.strategy.ml_engine import MLEngine
     engine = MLEngine()
     # Try to load pre-trained model if available
-    try:
+    import contextlib
+    with contextlib.suppress(Exception):
         engine.load_model("models/atlas_rf.joblib")
-    except Exception:
-        pass  # No pre-trained model available yet
     return engine
 
 
@@ -183,15 +185,12 @@ def get_realtime_service():
 
 def fetch_stock_data(code: str, period: str = "6mo") -> Any:
     """用 yfinance 取得股票歷史資料（快取 10 分鐘）。"""
-    import yfinance as yf
     import pandas as pd
+    import yfinance as yf
 
     @st.cache_data(ttl=600)
     def _fetch(code: str, period: str) -> pd.DataFrame:
-        if code.isdigit():
-            suffix = ".TWO" if _is_otc(code) else ".TW"
-        else:
-            suffix = ""
+        suffix = (".TWO" if _is_otc(code) else ".TW") if code.isdigit() else ""
         ticker = yf.Ticker(f"{code}{suffix}")
         df = ticker.history(period=period)
         if df is None or df.empty:
@@ -219,10 +218,7 @@ def fetch_stock_quote(code: str) -> dict[str, Any]:
 
         # yfinance fallback
         import yfinance as yf
-        if code.isdigit():
-            suffix = ".TWO" if _is_otc(code) else ".TW"
-        else:
-            suffix = ""
+        suffix = (".TWO" if _is_otc(code) else ".TW") if code.isdigit() else ""
         ticker = yf.Ticker(f"{code}{suffix}")
         info = ticker.fast_info
         try:
@@ -248,8 +244,9 @@ def _fetch_twse_quote(code: str) -> dict[str, Any]:
     上市股用 tse_{code}.tw，上櫃股用 otc_{code}.tw。
     若 tse 回傳空 msgArray，自動以 otc 前綴重試一次。
     """
-    import httpx
     import time as _time
+
+    import httpx
 
     url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
@@ -303,12 +300,12 @@ def _fetch_twse_quote(code: str) -> dict[str, Any]:
 
 def fetch_institutional_flow(code: str, days: int = 5) -> dict[str, Any]:
     """取得三大法人近N日買賣超（快取 30 分鐘）。"""
+
     import httpx
-    import time as _time
 
     @st.cache_data(ttl=1800)
     def _fetch(code: str, days: int) -> dict:
-        from datetime import date, timedelta
+        from datetime import date
         today = date.today()
         date_str = today.strftime("%Y%m%d")
 
@@ -391,17 +388,12 @@ def fetch_financials(code: str) -> dict[str, Any]:
     def _fetch(code: str) -> dict[str, Any]:
         import yfinance as yf
 
-        if code.isdigit():
-            suffix = ".TWO" if _is_otc(code) else ".TW"
-        else:
-            suffix = ""
+        suffix = (".TWO" if _is_otc(code) else ".TW") if code.isdigit() else ""
         ticker = yf.Ticker(f"{code}{suffix}")
 
         info: dict[str, Any] = {}
-        try:
+        with contextlib.suppress(Exception):
             info = ticker.info or {}
-        except Exception:
-            pass
 
         eps: float | None = info.get("trailingEps") or info.get("forwardEps")
         pe_ratio: float | None = info.get("trailingPE") or info.get("forwardPE")

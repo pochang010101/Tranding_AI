@@ -8,8 +8,8 @@ from datetime import date, datetime
 from atlas.enums import (
     AspectVerdict,
     ConclusionLevel,
-    ConflictFlag,
     ConfidenceLevel,
+    ConflictFlag,
     MarketType,
     SignalStrength,
 )

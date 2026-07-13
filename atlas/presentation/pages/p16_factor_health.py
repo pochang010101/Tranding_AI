@@ -8,7 +8,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from atlas.presentation.components.charts import _apply_layout, bar_chart, gauge_chart
+from atlas.presentation.components.charts import _apply_layout
 from atlas.presentation.components.theme import get_colors, metric_card
 from atlas.presentation.service_container import (
     get_daily_backtest_engine,
@@ -36,7 +36,7 @@ def _render_factor_section() -> None:
 
     # 模擬因子資料（實際接入後替換為真實計算）
     import numpy as np
-    engine = get_factor_mining_engine()
+    get_factor_mining_engine()
 
     np.random.seed(42)
     factor_names = [

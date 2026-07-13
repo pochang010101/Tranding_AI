@@ -14,14 +14,15 @@ import json
 import logging
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 
-from atlas.constants import OTC_CODES, is_otc as _is_otc  # noqa: F401
 from atlas.config import QuoteSourceConfig
+from atlas.constants import OTC_CODES  # noqa: F401
+from atlas.constants import is_otc as _is_otc
 from atlas.enums import DataSourceHealth, MarketType
 from atlas.exceptions import DataSourceError, QuoteUnavailableError
 from atlas.interfaces.infrastructure import ICacheService, IQuoteAdapter
@@ -212,7 +213,7 @@ class TWSEQuoteSource(QuoteSource):
         try:
             ts = datetime.strptime(f"{date_str} {time_str}", "%Y%m%d %H:%M:%S")
         except (ValueError, TypeError):
-            ts = datetime.now(tz=timezone.utc)
+            ts = datetime.now(tz=UTC)
 
         return StockQuote(
             code=code,
@@ -329,7 +330,7 @@ class YFinanceQuoteSource(QuoteSource):
             ask_price=price,
             change=change,
             change_pct=round(change_pct, 2),
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             source="yfinance",
         )
 
@@ -618,10 +619,7 @@ class QuoteAdapter(IQuoteAdapter):
         """用 yfinance 取最近一筆收盤價作為非交易時段報價。"""
         import yfinance as yf
 
-        if market == MarketType.TW:
-            suffix = ".TWO" if _is_otc(code) else ".TW"
-        else:
-            suffix = ""
+        suffix = (".TWO" if _is_otc(code) else ".TW") if market == MarketType.TW else ""
         ticker_code = f"{code}{suffix}"
         ticker = yf.Ticker(ticker_code)
         df = await asyncio.to_thread(ticker.history, period="5d")
@@ -645,7 +643,7 @@ class QuoteAdapter(IQuoteAdapter):
             ask_price=close,
             change=change,
             change_pct=round(change_pct, 2),
-            timestamp=datetime.now(tz=timezone.utc),
+            timestamp=datetime.now(tz=UTC),
             source="yfinance_last_close",
             is_stale=True,
         )

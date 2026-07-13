@@ -15,7 +15,6 @@ from atlas.presentation.service_container import (
     TW_TOP_STOCKS,
     fetch_stock_data,
     fetch_stock_quote,
-    get_indicator_lib,
     get_price_level_calc,
 )
 
@@ -64,10 +63,7 @@ def _price_level_chart(
         )
 
     # Fibonacci 區間（半透明色帶）
-    fibo_colors = ["rgba(255,152,0,0.08)", "rgba(33,150,243,0.08)",
-                   "rgba(156,39,176,0.08)", "rgba(0,188,212,0.08)",
-                   "rgba(233,30,99,0.08)"]
-    for i, (label, level) in enumerate(result.fibonacci.items()):
+    for _i, (label, level) in enumerate(result.fibonacci.items()):
         fig.add_hline(
             y=level, line_dash="dot", line_color="#888", line_width=0.8,
             annotation_text=f"Fib {label}: {level:.1f}",
@@ -133,7 +129,7 @@ def render() -> None:
 🛑 <strong>停損價</strong>：風控出場價位（紅色點劃線），建議虧損不超過單筆風險上限。風報比 ≥ 2 為佳。
 </div>
 """, unsafe_allow_html=True)
-    c = get_colors()
+    get_colors()
 
     # ── 控制列 ──
     col1, col2 = st.columns([3, 1])

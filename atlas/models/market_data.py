@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
-from atlas.enums import MarketType, TimeFrame
+from atlas.enums import MarketType
 
 
 @dataclass(frozen=True)

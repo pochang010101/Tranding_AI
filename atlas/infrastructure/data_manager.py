@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import asdict
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
@@ -13,7 +12,8 @@ import httpx
 import pandas as pd
 import yfinance as yf
 
-from atlas.constants import OTC_CODES, is_otc as _is_otc  # noqa: F401 (re-exported for _tw_code_to_yf)
+from atlas.constants import OTC_CODES  # noqa: F401 (re-exported for _tw_code_to_yf)
+from atlas.constants import is_otc as _is_otc
 from atlas.enums import MarketType
 from atlas.exceptions import (
     AllSourcesExhaustedError,
@@ -324,9 +324,7 @@ class DataManager(IDataManager):
         try:
             # 公開資訊觀測站 — 營收統計
             tw_year = year - 1911  # 轉民國年
-            url = "https://mops.twse.com.tw/nas/t21/sii/t21sc03_{}_{}_0.html".format(
-                tw_year, month
-            )
+            url = f"https://mops.twse.com.tw/nas/t21/sii/t21sc03_{tw_year}_{month}_0.html"
             async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
@@ -603,7 +601,6 @@ class DataManager(IDataManager):
                 SELECT COUNT(*) FROM daily_bars
                 WHERE market = :market AND trade_date = :trade_date
             """
-            from sqlalchemy import text
 
             res = await self._db.execute(
                 count_sql,
@@ -876,7 +873,6 @@ class DataManager(IDataManager):
             ORDER BY trade_date ASC
         """
         try:
-            from sqlalchemy import text
 
             result = await self._db.execute(
                 sql,

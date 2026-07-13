@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import streamlit as st
 
+from atlas.presentation.components.charts import bar_chart, gauge_chart
 from atlas.presentation.components.theme import get_colors, metric_card, regime_badge
-from atlas.presentation.components.charts import gauge_chart, bar_chart
 from atlas.presentation.service_container import (
-    fetch_stock_data, fetch_stock_quote, get_indicator_lib,
-    get_realtime_service, TW_TOP_STOCKS,
+    TW_TOP_STOCKS,
+    fetch_stock_data,
+    fetch_stock_quote,
+    get_indicator_lib,
+    get_realtime_service,
 )
 
 
@@ -57,7 +60,7 @@ def render() -> None:
 <span class="legend-good">排程狀態</span>：顯示盤前/盤中/盤後/月度重建各自動化任務的排定與執行情況
 </div>
 """, unsafe_allow_html=True)
-    c = get_colors()
+    get_colors()
     market = st.session_state.get("market", "TW")
 
     # ── Row 1: 大盤環境（用加權指數 ^TWII 即時資料）──
@@ -143,7 +146,7 @@ def render() -> None:
     pt_positions = st.session_state.get("pt_positions", [])
     pt_orders = st.session_state.get("pt_orders", [])
     pt_capital = st.session_state.get("pt_capital", 1_000_000)
-    eq = st.session_state.get("pt_equity_curve", [pt_capital])
+    st.session_state.get("pt_equity_curve", [pt_capital])
     sell_orders = [o for o in pt_orders if o.get("方向") == "賣出"]
     total_pnl = sum(o.get("損益", 0) for o in sell_orders)
     wins = sum(1 for o in sell_orders if o.get("損益", 0) > 0)

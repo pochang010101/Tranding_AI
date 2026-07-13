@@ -7,9 +7,8 @@ import logging
 import logging.handlers
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 _LOG_DIR = Path("logs")
 _LOG_FILE = _LOG_DIR / "atlas.log"
@@ -25,7 +24,7 @@ class _JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         entry = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
             "module": record.name,
             "message": record.getMessage(),

@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import streamlit as st
-import pandas as pd
 import numpy as np
+import pandas as pd
+import streamlit as st
 
-from atlas.presentation.components.theme import get_colors
 from atlas.presentation.components.charts import candlestick_chart
+from atlas.presentation.components.theme import get_colors
 from atlas.presentation.service_container import (
+    TW_TOP_STOCKS,
     fetch_stock_data,
     get_indicator_lib,
     get_smc_module,
-    TW_TOP_STOCKS,
 )
 
 # period label → yfinance period string

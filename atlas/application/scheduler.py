@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
@@ -63,10 +64,8 @@ class Scheduler(ISchedulerService):
         self._running = False
         if self._task and not self._task.done():
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
         logger.info("Scheduler stopped")
 
     async def add_schedule(
@@ -213,8 +212,6 @@ class Scheduler(ISchedulerService):
                 if now.weekday() not in valid_days:
                     return False
             # 避免同一分鐘重複觸發
-            if entry.last_run and (now - entry.last_run).total_seconds() < 120:
-                return False
-            return True
+            return not (entry.last_run and (now - entry.last_run).total_seconds() < 120)
         except (ValueError, IndexError):
             return False

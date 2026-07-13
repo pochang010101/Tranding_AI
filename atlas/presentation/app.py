@@ -33,8 +33,8 @@ def main() -> None:
         st.stop()
 
     from atlas.presentation.components.pwa import inject_pwa
-    from atlas.presentation.components.theme import inject_css, inject_mobile_css
     from atlas.presentation.components.sidebar import render_sidebar
+    from atlas.presentation.components.theme import inject_css, inject_mobile_css
 
     inject_pwa()
     inject_css()

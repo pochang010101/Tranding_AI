@@ -75,7 +75,6 @@ class SMCModule(ISMCModule):
 
         high = df["high"].values
         low = df["low"].values
-        close = df["close"].values
 
         for i in range(2, len(df)):
             # Bullish FVG: candle_3_low > candle_1_high

@@ -30,7 +30,7 @@ def _run_smart_scan() -> tuple[pd.DataFrame, str]:
 
 def render() -> None:
     st.title("🔍 每日選股")
-    c = get_colors()
+    get_colors()
 
     # ── 圖例說明 ──
     st.markdown("""
@@ -54,9 +54,9 @@ def render() -> None:
     # ── 控制列 ──
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        min_price = st.number_input("最低股價", value=20.0, step=5.0, key="scr_min_price")
+        st.number_input("最低股價", value=20.0, step=5.0, key="scr_min_price")
     with col2:
-        min_vol = st.number_input("最低成交量(張)", value=1000, step=100, key="scr_min_vol")
+        st.number_input("最低成交量(張)", value=1000, step=100, key="scr_min_vol")
     with col3:
         top_n = st.selectbox("顯示筆數", [20, 50, 100, 200], index=1)
 
@@ -315,6 +315,7 @@ def render() -> None:
 def _push_to_line(df: pd.DataFrame) -> None:
     """將選股結果格式化後推送到 LINE。"""
     from datetime import datetime
+
     from atlas.infrastructure.notifications.line import send_line_message_sync
 
     now = datetime.now().strftime("%Y/%m/%d %H:%M")

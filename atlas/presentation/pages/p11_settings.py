@@ -20,7 +20,7 @@ def render() -> None:
 🔒 <strong>敏感資訊</strong>：API Key、Webhook URL、資料庫連線字串以遮罩顯示，實際值請透過環境變數或 .env 設定。
 </div>
 """, unsafe_allow_html=True)
-    c = get_colors()
+    get_colors()
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "🔑 API 金鑰", "📢 推播通道", "🛡️ 風控參數", "📊 選股參數", "🖥️ 系統資訊",
@@ -215,7 +215,7 @@ def render() -> None:
             # Check indicator lib
             try:
                 from atlas.presentation.service_container import get_indicator_lib
-                lib = get_indicator_lib()
+                get_indicator_lib()
                 components_result.append(("IndicatorLib", "🟢 OK", "—"))
             except Exception as e:
                 components_result.append(("IndicatorLib", f"🔴 {e}", "—"))
@@ -223,7 +223,7 @@ def render() -> None:
             # Check SMC
             try:
                 from atlas.presentation.service_container import get_smc_module
-                smc = get_smc_module()
+                get_smc_module()
                 components_result.append(("SMC Module", "🟢 OK", "—"))
             except Exception as e:
                 components_result.append(("SMC Module", f"🔴 {e}", "—"))
@@ -231,7 +231,7 @@ def render() -> None:
             # Check Monte Carlo
             try:
                 from atlas.presentation.service_container import get_monte_carlo
-                mc = get_monte_carlo()
+                get_monte_carlo()
                 components_result.append(("Monte Carlo", "🟢 OK", "—"))
             except Exception as e:
                 components_result.append(("Monte Carlo", f"🔴 {e}", "—"))

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -184,9 +183,7 @@ class PatternSignalEngine:
                 mid_end = recent_lows[-1]
                 if mid_end > mid_start:
                     mid_high = max(close[mid_start:mid_end + 1])
-                    if mid_high > max(l1, l2) * 1.02:
-                        # 確認最新價格站上頸線
-                        if close[-1] > mid_high:
+                    if mid_high > max(l1, l2) * 1.02 and close[-1] > mid_high:
                             return True, "W底"
 
         # 頭肩底：三低點，中間最低

@@ -119,8 +119,8 @@ def detect_hot_themes(daily_df: pd.DataFrame, top_n: int = 10) -> list[ThemeHeat
     if daily_df.empty or "code" not in daily_df.columns:
         return []
 
-    code_change = dict(zip(daily_df["code"], daily_df["change_pct"]))
-    code_name = dict(zip(daily_df["code"], daily_df.get("name", daily_df["code"])))
+    code_change = dict(zip(daily_df["code"], daily_df["change_pct"], strict=False))
+    code_name = dict(zip(daily_df["code"], daily_df.get("name", daily_df["code"]), strict=False))
 
     results = []
     for theme_name, members in THEME_MAP.items():

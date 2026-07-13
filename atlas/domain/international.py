@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import yfinance as yf
@@ -50,7 +50,7 @@ class InternationalMarket(IInternationalMarket):
         return {
             "indices": indices,
             "stocks": stocks,
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "timestamp": datetime.now(tz=UTC).isoformat(),
             "source": "yfinance",
         }
 

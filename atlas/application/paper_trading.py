@@ -169,13 +169,12 @@ class PaperTradingEngine:
                 continue
 
             # 限價單成交判斷
-            if order.limit_price is not None:
-                if order.side == OrderSide.BUY and current_price <= order.limit_price:
-                    await self._fill_order(order, current_price)
-                    filled.append(order)
-                elif order.side == OrderSide.SELL and current_price >= order.limit_price:
-                    await self._fill_order(order, current_price)
-                    filled.append(order)
+            if order.limit_price is not None and (
+                order.side == OrderSide.BUY and current_price <= order.limit_price
+                or order.side == OrderSide.SELL and current_price >= order.limit_price
+            ):
+                await self._fill_order(order, current_price)
+                filled.append(order)
 
         # 檢查已持有部位的停損停利
         filled.extend(await self._check_stop_take())

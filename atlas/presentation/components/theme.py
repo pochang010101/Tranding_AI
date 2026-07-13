@@ -212,7 +212,7 @@ def inject_mobile_css() -> None:
 
 def metric_card(title: str, value: str, delta: str = "", status: str = "neutral") -> str:
     """產生指標卡片 HTML。"""
-    c = get_colors()
+    get_colors()
     delta_html = f'<span class="{status}">{delta}</span>' if delta else ""
     return f"""
     <div class="metric-card">

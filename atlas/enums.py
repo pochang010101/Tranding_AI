@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from enum import IntEnum, StrEnum, auto
+from enum import IntEnum, StrEnum
 
 
 class MarketType(StrEnum):

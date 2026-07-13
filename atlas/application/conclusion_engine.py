@@ -10,7 +10,6 @@ Phase 11 B6 重構：
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from atlas.enums import (
@@ -271,9 +270,7 @@ class ConclusionEngine(IConclusionEngine):
             flags.append(ConflictFlag.COUNTER_TREND)
 
         # 規則 2：訊號互斥 — 強度與結論方向相反
-        if strength <= SignalStrength.WEAK_SELL and raw_level >= ConclusionLevel.LV3:
-            flags.append(ConflictFlag.SIGNAL_CLASH)
-        elif strength >= SignalStrength.WEAK_BUY and raw_level <= ConclusionLevel.LV_NEG1:
+        if strength <= SignalStrength.WEAK_SELL and raw_level >= ConclusionLevel.LV3 or strength >= SignalStrength.WEAK_BUY and raw_level <= ConclusionLevel.LV_NEG1:
             flags.append(ConflictFlag.SIGNAL_CLASH)
 
         # 規則 4：面向衝突 — 技術與籌碼嚴重相反

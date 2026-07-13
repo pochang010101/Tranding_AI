@@ -7,7 +7,6 @@ from datetime import datetime
 
 from atlas.enums import (
     ConfidenceLevel,
-    ConclusionLevel,
     DetectorType,
     MarketType,
     SignalType,

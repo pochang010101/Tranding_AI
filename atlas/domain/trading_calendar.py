@@ -54,10 +54,7 @@ class TradingCalendar:
             return False
 
         fixed = _TW_FIXED_HOLIDAYS_MD if market == MarketType.TW else _US_FIXED_HOLIDAYS_MD
-        if (d.month, d.day) in fixed:
-            return False
-
-        return True
+        return (d.month, d.day) not in fixed
 
     def next_trading_day(
         self, d: date, market: MarketType = MarketType.TW

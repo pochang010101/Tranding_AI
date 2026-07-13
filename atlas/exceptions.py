@@ -155,7 +155,7 @@ class FutureFunctionError(StrategyError):
         self.code = "FUTURE_FUNCTION"
 
 
-class OverfittingWarning(StrategyError):
+class OverfittingError(StrategyError):
     """過度擬合警告（Walk-forward 偏差過大）。
 
     Attributes:

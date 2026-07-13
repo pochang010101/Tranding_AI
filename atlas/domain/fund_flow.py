@@ -78,9 +78,7 @@ class FundFlowService:
             count = 0
             direction = 1 if series[-1] > 0 else -1 if series[-1] < 0 else 0
             for val in reversed(series):
-                if direction > 0 and val > 0:
-                    count += 1
-                elif direction < 0 and val < 0:
+                if direction > 0 and val > 0 or direction < 0 and val < 0:
                     count += 1
                 else:
                     break

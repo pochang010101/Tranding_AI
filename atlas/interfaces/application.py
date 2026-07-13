@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import date, datetime
-from typing import TYPE_CHECKING, Any, Callable
+from datetime import date
+from typing import TYPE_CHECKING, Any
 
 from atlas.enums import (
     BacktestStatus,

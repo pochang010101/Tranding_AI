@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date
 from typing import TYPE_CHECKING, Any
 
 from atlas.interfaces.strategy import IIPOModule
@@ -76,13 +76,13 @@ class IPOModule(IIPOModule):
 
         只回傳尚未截止的申購（申購迄日 >= 今天）。
         """
-        import httpx
         from datetime import date as _date
         from io import StringIO
 
+        import httpx
         import pandas as pd
 
-        _HEADERS = {
+        headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
         results: list[dict[str, Any]] = []
@@ -93,7 +93,7 @@ class IPOModule(IIPOModule):
         try:
             resp = httpx.get(
                 "https://histock.tw/stock/public.aspx",
-                headers=_HEADERS,
+                headers=headers,
                 timeout=15,
                 verify=False,
             )

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import date, datetime
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from datetime import date
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import pandas as pd
 
-from atlas.enums import DataSourceHealth, MarketType, TimeFrame
-from atlas.models.market_data import DailyBar, IntradayTick, StockQuote
+from atlas.enums import DataSourceHealth, MarketType
+from atlas.models.market_data import DailyBar, StockQuote
 
 if TYPE_CHECKING:
     from atlas.models.notification import NotificationPayload
@@ -301,7 +301,7 @@ class ICacheService(ABC):
 # ──────────────────────────────────────────────
 # IRepository[T] — 通用儲存庫介面
 # ──────────────────────────────────────────────
-class IRepository(ABC, Generic[T]):
+class IRepository[T](ABC):
     """通用 CRUD 儲存庫（Repository Pattern）。
 
     Type parameter T 為資料實體類型。
