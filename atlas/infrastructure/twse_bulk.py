@@ -435,3 +435,78 @@ def fetch_tpex_institutional(dt: date | None = None) -> pd.DataFrame:
     logger.info("TPEx institutional: fetched %d stocks for %s", len(df), date_str)
     _tpex_inst_cache[dt] = df
     return df
+
+
+# ── 台指期 (TAIFEX) ──────────────────────────────
+
+_DAY_SESSION = b"\xa4\x40\xaf\xeb"  # "一般" in cp950
+_NIGHT_SESSION = b"\xbd\x4c\xab\xe1"  # "盤後" in cp950
+
+_taifex_cache: dict[tuple[date, str], dict[str, float]] = {}
+
+
+def fetch_taifex_futures(
+    dt: date | None = None, session: str = "night",
+) -> dict[str, float]:
+    """取得台指期近月報價。
+
+    Args:
+        dt: 查詢日期，預設今天。
+        session: "day" 日盤, "night" 夜盤（盤前分析用夜盤）。
+
+    Returns:
+        {"open", "high", "low", "close", "change", "volume", "settle"}
+    """
+    dt = dt or date.today()
+    cache_key = (dt, session)
+    if cache_key in _taifex_cache:
+        return _taifex_cache[cache_key]
+
+    date_str = dt.strftime("%Y/%m/%d")
+    try:
+        resp = httpx.post(
+            "https://www.taifex.com.tw/cht/3/futDataDown",
+            data={
+                "down_type": 1,
+                "queryStartDate": date_str,
+                "queryEndDate": date_str,
+                "commodity_id": "TX",
+            },
+            timeout=_TIMEOUT,
+            headers=_HEADERS,
+        )
+        resp.raise_for_status()
+        text = resp.content.decode("cp950", errors="replace")
+    except Exception as exc:
+        logger.warning("TAIFEX futures fetch failed: %s", exc)
+        return {}
+
+    target_session = _NIGHT_SESSION if session == "night" else _DAY_SESSION
+    lines = text.strip().split("\n")
+
+    for line in lines[1:]:
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 18:
+            continue
+        # 只看近月（不含價差月份 "202607/202608"）
+        if "/" in parts[2]:
+            continue
+        session_bytes = parts[17].encode("cp950", errors="replace")
+        if session_bytes != target_session:
+            continue
+
+        result = {
+            "open": _safe_num(parts[3]),
+            "high": _safe_num(parts[4]),
+            "low": _safe_num(parts[5]),
+            "close": _safe_num(parts[6]),
+            "change": _safe_num(parts[7]),
+            "volume": _safe_num(parts[9]),
+            "settle": _safe_num(parts[10]),
+        }
+        logger.info("TAIFEX TX %s: close=%s change=%s", session, result["close"], result["change"])
+        _taifex_cache[cache_key] = result
+        return result
+
+    logger.warning("TAIFEX TX: no %s session data for %s", session, date_str)
+    return {}

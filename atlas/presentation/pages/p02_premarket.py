@@ -53,18 +53,17 @@ def render() -> None:
     get_colors()
 
     # ══════════════════════════════════════════════
-    # Section 1: 美股四大指數 + 台指期
+    # Section 1: 美股四大指數 + 台指期夜盤
     # ══════════════════════════════════════════════
-    st.subheader("美股四大指數 + 台指期")
-    indices = [
+    st.subheader("美股四大指數 + 台指期夜盤")
+    us_indices = [
         ("道瓊", "^DJI"),
         ("S&P 500", "^GSPC"),
         ("NASDAQ", "^IXIC"),
         ("費半 SOX", "^SOX"),
-        ("台指期", "TWF"),
     ]
-    cols = st.columns(len(indices))
-    for col, (name, ticker) in zip(cols, indices, strict=False):
+    cols = st.columns(5)
+    for col, (name, ticker) in zip(cols[:4], us_indices, strict=False):
         with col:
             try:
                 q = fetch_stock_quote(ticker)
@@ -77,6 +76,26 @@ def render() -> None:
             except Exception:
                 st.markdown(metric_card(name, "—", status="neutral"),
                             unsafe_allow_html=True)
+
+    # 台指期夜盤（期交所 API）
+    with cols[4]:
+        try:
+            from atlas.infrastructure.twse_bulk import fetch_taifex_futures
+            twf = fetch_taifex_futures(session="night")
+            if twf and twf.get("close"):
+                twf_close = twf["close"]
+                twf_change = twf["change"]
+                twf_pct = twf_change / (twf_close - twf_change) * 100 if (twf_close - twf_change) else 0
+                st.markdown(metric_card(
+                    "台指期夜盤", f"{twf_close:,.0f}", f"{twf_pct:+.2f}%",
+                    "positive" if twf_change > 0 else "negative" if twf_change < 0 else "neutral",
+                ), unsafe_allow_html=True)
+            else:
+                st.markdown(metric_card("台指期夜盤", "—", status="neutral"),
+                            unsafe_allow_html=True)
+        except Exception:
+            st.markdown(metric_card("台指期夜盤", "—", status="neutral"),
+                        unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════
     # Section 2: ADR 表現 + 缺口預測
@@ -112,13 +131,17 @@ def render() -> None:
     with col_right:
         st.subheader("缺口預測")
         try:
+            from atlas.infrastructure.twse_bulk import fetch_taifex_futures
+
             sox_q = fetch_stock_quote("^SOX")
             tsm_q = fetch_stock_quote("TSM")
-            twf_q = fetch_stock_quote("TWF")
+            twf = fetch_taifex_futures(session="night")
 
             sox_chg = _pct_change(sox_q)
             tsm_chg = _pct_change(tsm_q)
-            twf_chg = _pct_change(twf_q)
+            twf_close = twf.get("close", 0)
+            twf_change = twf.get("change", 0)
+            twf_chg = twf_change / (twf_close - twf_change) * 100 if (twf_close - twf_change) else 0
 
             # 加權預估：費半 40% + 台積ADR 30% + 台指期 30%
             gap_est = sox_chg * 0.4 + tsm_chg * 0.3 + twf_chg * 0.3
