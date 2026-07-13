@@ -33,7 +33,6 @@ jobs:
         with:
           python-version: "3.14"
           allow-prereleases: true
-          cache: pip
 
       - name: Syntax check all Python files
         run: |
