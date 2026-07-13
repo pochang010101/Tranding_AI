@@ -157,7 +157,7 @@ def render() -> None:
             title="綜合技術分",
             height=280,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # 細項
         detail_rows = [
@@ -167,7 +167,7 @@ def render() -> None:
             {"指標": "N底偵測", "值": pattern_result.n_bottom_type or "未偵測到"},
             {"指標": "綜合分數", "值": f"{pattern_result.composite_score:.1f}"},
         ]
-        st.dataframe(pd.DataFrame(detail_rows), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(detail_rows), hide_index=True, width="stretch")
 
     with col_b:
         st.subheader("籌碼集中度")
@@ -186,7 +186,7 @@ def render() -> None:
                 (100, c["accent"]),
             ],
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width="stretch")
 
         # 法人明細
         st.markdown("**三大法人淨買賣**")
@@ -196,7 +196,7 @@ def render() -> None:
             {"法人": "自營", "淨買賣(張)": inst_data.get("dealer_net", 0)},
             {"法人": "合計", "淨買賣(張)": inst_data.get("total_net", 0)},
         ]
-        st.dataframe(pd.DataFrame(inst_rows), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(inst_rows), hide_index=True, width="stretch")
 
     # ── 葛蘭碧法則觸發 ──
     if pattern_result.granville_rules:

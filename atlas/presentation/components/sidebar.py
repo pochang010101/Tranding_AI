@@ -87,7 +87,7 @@ def render_sidebar() -> str:
         with col:
             btn_type = "primary" if current == key else "secondary"
             if st.button(f"{icon}{label}", key=f"nav_{key}", type=btn_type,
-                         use_container_width=True):
+                         width="stretch"):
                 st.session_state["page"] = key
                 st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)

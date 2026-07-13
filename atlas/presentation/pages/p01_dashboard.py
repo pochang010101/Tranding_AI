@@ -205,7 +205,7 @@ def render() -> None:
             ],
             "狀態": ["⏳ 排程中", "⏳ 排程中", "⏳ 排程中", "⏳ 排程中"],
         }
-        st.dataframe(schedules, use_container_width=True, hide_index=True)
+        st.dataframe(schedules, width="stretch", hide_index=True)
         st.caption("非交易日自動跳過（月度重建除外）")
 
     # Footer

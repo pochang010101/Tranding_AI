@@ -198,7 +198,7 @@ def render() -> None:
     # ── K 線圖 + 價位 ──
     st.divider()
     fig = _price_level_chart(df, result, title=f"{name} ({code}) — 支撐壓力 + Fibonacci")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ── 明細表 ──
     st.divider()
@@ -212,7 +212,7 @@ def render() -> None:
         for i, r in enumerate(result.resistances):
             rows.append({"類型": "壓力", "序號": f"R{i+1}", "價位": round(r, 2)})
         if rows:
-            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
         else:
             st.info("無明顯支撐壓力（資料太短或趨勢太強）")
 
@@ -220,6 +220,6 @@ def render() -> None:
         st.subheader("Fibonacci 回撤")
         if result.fibonacci:
             fibo_rows = [{"比例": k, "價位": v} for k, v in result.fibonacci.items()]
-            st.dataframe(pd.DataFrame(fibo_rows), hide_index=True, use_container_width=True)
+            st.dataframe(pd.DataFrame(fibo_rows), hide_index=True, width="stretch")
         else:
             st.info("無 Fibonacci 資料")

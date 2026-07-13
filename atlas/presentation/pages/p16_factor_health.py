@@ -80,13 +80,13 @@ def _render_factor_section() -> None:
     fig.add_hline(y=0.5, line_dash="dash", line_color="#4caf50",
                   annotation_text="有效閾值 (0.5)")
     fig.add_hline(y=0, line_dash="solid", line_color="#666")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # 明細表
     st.dataframe(
         demo_df,
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         column_config={
             "ICIR": st.column_config.NumberColumn(format="%.2f"),
             "IC均值": st.column_config.NumberColumn(format="%.4f"),
@@ -189,7 +189,7 @@ def _render_strategy_health() -> None:
     st.dataframe(
         pd.DataFrame(rows),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         column_config={
             "健康分": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
         },
@@ -213,7 +213,7 @@ def _render_strategy_health() -> None:
         fig = _apply_layout(fig, "策略健康分", 320)
         fig.add_hline(y=60, line_dash="dash", line_color="#4caf50",
                       annotation_text="健康閾值")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_b:
         win_rates = [s.win_rate * 100 for s in report.strategies]
@@ -229,7 +229,7 @@ def _render_strategy_health() -> None:
         fig2 = _apply_layout(fig2, "策略勝率", 320)
         fig2.add_hline(y=50, line_dash="dash", line_color="#4caf50",
                        annotation_text="50% 基準線")
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width="stretch")
 
     # 行動建議
     if report.action_items:

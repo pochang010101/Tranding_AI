@@ -76,7 +76,7 @@ def render() -> None:
             default=[],
         )
 
-    run_btn = st.button("🔍 執行全市場掃描", type="primary", use_container_width=True)
+    run_btn = st.button("🔍 執行全市場掃描", type="primary", width="stretch")
 
     # ── 執行掃描 ──
     if run_btn:
@@ -191,7 +191,7 @@ def render() -> None:
 
     st.dataframe(
         show_df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=min(600, 40 + len(show_df) * 35),
         column_config={
@@ -222,7 +222,7 @@ def render() -> None:
                 title="選股分數排行",
                 height=350,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
     with col_b:
         st.subheader("法人買賣超 — Top 10")
@@ -255,7 +255,7 @@ def render() -> None:
                 legend=dict(orientation="h", yanchor="bottom", y=1.02),
             )
             fig2.add_hline(y=0, line_color="#555")
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width="stretch")
 
     # ── 訊號標籤分佈 ──
     st.divider()
@@ -298,7 +298,7 @@ def render() -> None:
             font=dict(color="#e0e0e0"),
             xaxis=dict(showgrid=False),
         )
-        st.plotly_chart(fig3, use_container_width=True)
+        st.plotly_chart(fig3, width="stretch")
 
     # ── 匯出 + LINE 推送 ──
     st.divider()
@@ -306,9 +306,9 @@ def render() -> None:
     with col_e2:
         csv = display_df.head(top_n).to_csv(index=False).encode("utf-8-sig")
         st.download_button("📥 匯出 CSV", csv, "smart_scan_result.csv", "text/csv",
-                           use_container_width=True)
+                           width="stretch")
     with col_e3:
-        if st.button("📲 推送到 LINE", use_container_width=True, type="primary"):
+        if st.button("📲 推送到 LINE", width="stretch", type="primary"):
             _push_to_line(display_df.head(top_n))
 
 

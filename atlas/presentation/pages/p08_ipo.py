@@ -76,7 +76,7 @@ def render() -> None:
         df_ipo = pd.DataFrame(ipo_rows)
         st.dataframe(
             df_ipo,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "承銷價": st.column_config.NumberColumn(format="$%.1f"),
