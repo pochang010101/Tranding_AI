@@ -1,4 +1,4 @@
-"""P-03 盤中雷達 — 即時訊號列表、偵測器統計、持倉損益、推播歷史。"""
+"""P-03 盤中雷達 — 即時訊號列表、偵測器統計、持倉損益。"""
 
 from __future__ import annotations
 
@@ -13,59 +13,85 @@ from atlas.presentation.service_container import (
     fetch_stock_quote,
 )
 
+# 台股熱門觀察清單（預設）
+_DEFAULT_WATCHLIST = [
+    "2330", "2317", "2454", "2382", "2308",  # 電子權值
+    "2881", "2882", "2884", "2886", "2891",  # 金融
+    "2303", "2357", "3711", "2379", "3008",  # 科技
+    "1301", "1303", "1326", "2002", "2105",  # 傳產
+]
+
 
 def render() -> None:
     st.title("📡 盤中雷達")
     st.markdown("""
 <div class="legend-box">
 <strong>欄位說明</strong><br>
-<span class="legend-good">即時訊號</span>：11 種盤中偵測器（產業急拉/大單異常/爆量啟動/起漲觸發/均線跌破/甩轎回穩/出貨預警/價量背離/急拉急殺/流動性掃單/OB回測）<br>
+<span class="legend-good">偵測器</span>：爆量啟動 / 大單異常 / 急拉急殺 / 均線跌破(突破) / 價量背離<br>
 <span class="legend-warn">訊號強度（嚴重度）</span>：<span class="legend-good">3⭐ Strong — 立即關注</span>、<span class="legend-warn">2⭐ Medium — 列入觀察</span>、<span class="legend-bad">1⭐ Weak — 僅供參考</span><br>
-<span class="legend-good">觸發時間</span>：訊號發生的時間點，越近期越具有效性，盤末訊號需隔日確認<br>
-<span class="legend-warn">方向</span>：<span class="legend-good">BUY 買入訊號</span>、<span class="legend-bad">SELL 賣出/警示訊號</span>、<span class="legend-warn">ALERT 中性警示</span>
+<span class="legend-good">方向</span>：<span class="legend-good">BUY 買入訊號</span>、<span class="legend-bad">SELL 賣出/警示訊號</span>、<span class="legend-warn">ALERT 中性警示</span>
 </div>
 """, unsafe_allow_html=True)
     get_colors()
 
-    # ── 雷達狀態 ────────────────────────────────
-    radar_running: bool = st.session_state.get("radar_running", False)
+    # ── 掃描控制 ────────────────────────────────
+    with st.expander("🔧 觀察名單與掃描", expanded=True):
+        watchlist_input = st.text_area(
+            "觀察名單（逗號分隔代碼）",
+            value=", ".join(_DEFAULT_WATCHLIST),
+            height=68,
+        )
+        codes = [c.strip() for c in watchlist_input.replace("\n", ",").split(",") if c.strip()]
+
+        col_btn, col_info = st.columns([1, 3])
+        with col_btn:
+            scan_clicked = st.button("🔍 執行掃描", type="primary", use_container_width=True)
+        with col_info:
+            st.caption(f"將掃描 {len(codes)} 檔股票 × 5 偵測器（爆量/大單/急拉急殺/均線/價量背離）")
+
+    # ── 執行掃描 ────────────────────────────────
+    if scan_clicked and codes:
+        from atlas.application.realtime_radar import scan_watchlist_sync
+
+        with st.spinner(f"掃描 {len(codes)} 檔股票中…"):
+            signals = scan_watchlist_sync(codes)
+            st.session_state["radar_signals"] = signals
+
     signals: list[dict] = st.session_state.get("radar_signals", [])
 
+    # ── 雷達狀態 ────────────────────────────────
     buy_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "BUY")
     sell_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "SELL")
+    alert_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "ALERT")
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        status_label = "🟢 執行中" if radar_running else "🔴 已停止"
-        status_color = "positive" if radar_running else "negative"
-        st.markdown(metric_card("雷達狀態", status_label, status=status_color), unsafe_allow_html=True)
+        st.markdown(
+            metric_card("今日告警", str(len(signals)), status="neutral"),
+            unsafe_allow_html=True,
+        )
     with col2:
-        st.markdown(metric_card("今日告警", str(len(signals)), status="neutral"), unsafe_allow_html=True)
+        st.markdown(
+            metric_card("買入訊號", str(buy_count), status="positive"),
+            unsafe_allow_html=True,
+        )
     with col3:
-        st.markdown(metric_card("買入訊號", str(buy_count), status="positive"), unsafe_allow_html=True)
+        st.markdown(
+            metric_card("賣出訊號", str(sell_count), status="negative"),
+            unsafe_allow_html=True,
+        )
     with col4:
-        st.markdown(metric_card("賣出訊號", str(sell_count), status="negative"), unsafe_allow_html=True)
-
-    # ── 偵測器開關 ──────────────────────────────
-    st.divider()
-    with st.expander("🔧 偵測器管理", expanded=False):
-        detectors = [
-            ("產業急拉", True), ("大單異常", True), ("爆量啟動", True),
-            ("起漲觸發", True), ("均線跌破", True), ("甩轎回穩", True),
-            ("出貨預警", True), ("價量背離", True), ("急拉急殺", True),
-            ("流動性掃單", False), ("OB 回測", False),
-        ]
-        cols = st.columns(4)
-        for i, (name, default) in enumerate(detectors):
-            with cols[i % 4]:
-                st.checkbox(name, value=default, key=f"det_{name}")
+        st.markdown(
+            metric_card("中性警示", str(alert_count), status="neutral"),
+            unsafe_allow_html=True,
+        )
 
     # ── 即時訊號列表 ────────────────────────────
     st.divider()
-    st.subheader("即時訊號")
+    st.subheader("訊號列表")
 
     if not signals:
-        st.info("目前無訊號。雷達啟動後訊號將即時顯示於此。")
+        st.info("目前無訊號。按上方「執行掃描」開始掃描觀察名單。")
     else:
         direction_icon = {"BUY": "🟢 BUY", "SELL": "🔴 SELL", "ALERT": "🟡 ALERT"}
 
@@ -99,22 +125,36 @@ def render() -> None:
     with col_a:
         st.subheader("偵測器觸發統計")
         if signals:
-            det_counter = Counter(s.get("detector", "") for s in signals if s.get("detector"))
-            det_names, det_counts = zip(*det_counter.most_common(10), strict=False) if det_counter else ([], [])
-            fig = bar_chart(list(det_names), list(det_counts), title="今日觸發次數",
-                            horizontal=True, height=350)
-            st.plotly_chart(fig, width="stretch")
+            det_counter = Counter(
+                s.get("detector", "") for s in signals if s.get("detector")
+            )
+            if det_counter:
+                det_names, det_counts = zip(*det_counter.most_common(10), strict=False)
+                fig = bar_chart(
+                    list(det_names), list(det_counts),
+                    title="今日觸發次數", horizontal=True, height=350,
+                )
+                st.plotly_chart(fig, width="stretch")
+            else:
+                st.info("無訊號資料。")
         else:
             st.info("無訊號資料。")
 
     with col_b:
         st.subheader("熱門標的")
         if signals:
-            code_counter = Counter(s.get("code", "") for s in signals if s.get("code"))
-            hot_codes, hot_counts = zip(*code_counter.most_common(10), strict=False) if code_counter else ([], [])
-            fig = bar_chart(list(hot_codes), list(hot_counts), title="觸發次數 by 標的",
-                            horizontal=True, height=350)
-            st.plotly_chart(fig, width="stretch")
+            code_counter = Counter(
+                s.get("code", "") for s in signals if s.get("code")
+            )
+            if code_counter:
+                hot_codes, hot_counts = zip(*code_counter.most_common(10), strict=False)
+                fig = bar_chart(
+                    list(hot_codes), list(hot_counts),
+                    title="觸發次數 by 標的", horizontal=True, height=350,
+                )
+                st.plotly_chart(fig, width="stretch")
+            else:
+                st.info("無訊號資料。")
         else:
             st.info("無訊號資料。")
 
@@ -139,7 +179,6 @@ def render() -> None:
             quote = fetch_stock_quote(code)
             current_price = quote.get("price", 0) or entry_price
 
-            # 每張 = 1000 股
             pnl = (current_price - entry_price) * lots * 1000
             pnl_pct = ((current_price - entry_price) / entry_price * 100) if entry_price else 0
             r_multiple = None

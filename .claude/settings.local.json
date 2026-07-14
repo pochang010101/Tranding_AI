@@ -55,7 +55,8 @@
       "Bash(docker restart:*)",
       "Bash(gh api:*)",
       "Bash(gh run:*)",
-      "WebFetch(domain:tranding-ai.streamlit.app)"
+      "WebFetch(domain:tranding-ai.streamlit.app)",
+      "Bash(ruff check:*)"
     ]
   }
 }
