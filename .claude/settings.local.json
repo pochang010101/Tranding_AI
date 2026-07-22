@@ -56,7 +56,15 @@
       "Bash(gh api:*)",
       "Bash(gh run:*)",
       "WebFetch(domain:tranding-ai.streamlit.app)",
-      "Bash(ruff check:*)"
+      "Bash(ruff check:*)",
+      "Bash(streamlit run:*)",
+      "Bash(export ATLAS_DATABASE_URL=postgresql://atlas:atlas_dev@localhost:5432/atlas)",
+      "Bash(PYTHONPATH=. ATLAS_DATABASE_URL=postgresql://atlas:atlas_dev@localhost:5432/atlas python scripts/seed_data.py 2>&1)",
+      "Bash(PYTHONPATH=. ATLAS_DATABASE_URL=postgresql+asyncpg://atlas:atlas_dev@localhost:5432/atlas python scripts/seed_data.py 2>&1)",
+      "Bash(PYTHONPATH=. ATLAS_DATABASE_URL=postgresql+asyncpg://atlas:atlas_dev@localhost:5432/atlas python scripts/verify_e2e.py 2>&1)",
+      "Bash(PYTHONPATH=. python -c \"\nfrom atlas.infrastructure.twse_bulk import fetch_twse_daily_all, fetch_twse_institutional, last_trading_date\nfrom datetime import date\n\ndf = fetch_twse_daily_all\\(\\)\nprint\\(f'Trading date used: {last_trading_date}'\\)\nprint\\(f'Stocks fetched: {len\\(df\\)}'\\)\nif not df.empty:\n    print\\(df[['code','name','close','change_pct','volume_lots']].head\\(5\\)\\)\nelse:\n    print\\('Empty DataFrame - no data returned'\\)\n\" 2>&1)",
+      "Bash(PYTHONPATH=. python -c \":*)",
+      "Bash(PYTHONPATH=. python -c \"\nfrom datetime import datetime\nfrom atlas.constants import TW_TZ\nprint\\(f'UTC:    {datetime.now\\(\\).strftime\\(\\\\\"%Y/%m/%d %H:%M\\\\\"\\)}'\\)\nprint\\(f'Taiwan: {datetime.now\\(TW_TZ\\).strftime\\(\\\\\"%Y/%m/%d %H:%M\\\\\"\\)}'\\)\n\" 2>&1)"
     ]
   }
 }

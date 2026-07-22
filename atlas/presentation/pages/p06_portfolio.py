@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from atlas.constants import TW_TZ as _TW_TZ
 from atlas.presentation.components.charts import equity_curve, histogram
 from atlas.presentation.components.theme import get_colors, metric_card
 
@@ -266,7 +267,7 @@ def render() -> None:
                         "方向": "賣出",
                         "價格": close_price,
                         "張數": lots,
-                        "時間": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "時間": datetime.datetime.now(tz=_TW_TZ).strftime("%Y-%m-%d %H:%M"),
                         "損益": round(pnl, 0),
                         "原因": close_reason,
                     })

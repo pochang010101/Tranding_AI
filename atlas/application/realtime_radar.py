@@ -419,7 +419,8 @@ def scan_watchlist_sync(
         indicator_lib = IndicatorLibrary()
 
     results: list[dict[str, Any]] = []
-    now_str = datetime.now().strftime("%H:%M")
+    from atlas.constants import TW_TZ
+    now_str = datetime.now(TW_TZ).strftime("%H:%M")
 
     # 批次下載歷史資料（效率遠高於逐一下載）
     tickers = [f"{c}.TWO" if is_otc(c) else f"{c}.TW" for c in codes]

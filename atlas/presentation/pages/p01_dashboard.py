@@ -214,4 +214,5 @@ def render() -> None:
     # Footer
     st.divider()
     from datetime import datetime
-    st.caption(f"市場：{market} | 更新時間：{datetime.now().strftime('%H:%M:%S')} | Atlas v5.0")
+    from atlas.constants import TW_TZ
+    st.caption(f"市場：{market} | 更新時間：{datetime.now(TW_TZ).strftime('%H:%M:%S')} | Atlas v5.0")

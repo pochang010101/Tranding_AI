@@ -113,10 +113,18 @@ def render() -> None:
         st.warning("掃描無結果。可能原因：API 尚未更新或篩選條件過嚴。")
         return
 
-    # 顯示資料日期（非交易日會自動回退至最近交易日）
+    # 顯示資料日期（非交易日或盤中會自動回退至最近交易日）
     data_date = st.session_state.get("smart_scan_date", "")
     if data_date:
-        st.info(f"📅 資料日期：**{data_date}**（非交易日自動取得最近交易日資料）")
+        from datetime import date as _date
+        today_str = _date.today().strftime("%Y-%m-%d")
+        if data_date == today_str:
+            st.success(f"📅 資料日期：**{data_date}**（今日收盤資料）")
+        else:
+            st.warning(
+                f"📅 資料日期：**{data_date}**（非今日資料）\n\n"
+                "⚠️ 今日收盤資料尚未更新（TWSE 通常於 **15:00 後**發布），目前使用最近交易日資料。"
+            )
 
     # ── 標籤 + 題材篩選 ──
     display_df = scan_result.copy()
@@ -316,9 +324,10 @@ def _push_to_line(df: pd.DataFrame) -> None:
     """將選股結果格式化後推送到 LINE。"""
     from datetime import datetime
 
+    from atlas.constants import TW_TZ
     from atlas.infrastructure.notifications.line import send_line_message_sync
 
-    now = datetime.now().strftime("%Y/%m/%d %H:%M")
+    now = datetime.now(TW_TZ).strftime("%Y/%m/%d %H:%M")
     lines = [f"📊 Atlas 選股結果 ({now})", f"共 {len(df)} 檔命中", ""]
 
     for _, row in df.head(20).iterrows():
