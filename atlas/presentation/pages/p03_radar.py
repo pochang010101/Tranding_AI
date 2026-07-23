@@ -43,19 +43,37 @@ def render() -> None:
         )
         codes = [c.strip() for c in watchlist_input.replace("\n", ",").split(",") if c.strip()]
 
-        col_btn, col_info = st.columns([1, 3])
+        col_btn, col_auto, col_info = st.columns([1, 1, 2])
         with col_btn:
             scan_clicked = st.button("🔍 執行掃描", type="primary", use_container_width=True)
+        with col_auto:
+            auto_refresh = st.toggle("⏱ 自動更新 (30s)", value=True, key="radar_auto_refresh")
         with col_info:
             st.caption(f"將掃描 {len(codes)} 檔股票 × 5 偵測器（爆量/大單/急拉急殺/均線/價量背離）")
 
-    # ── 執行掃描 ────────────────────────────────
-    if scan_clicked and codes:
-        from atlas.application.realtime_radar import scan_watchlist_sync
+    # ── 執行掃描（手動或自動） ────────────────────
+    def _do_scan(codes: list[str]) -> None:
+        from datetime import datetime
 
+        from atlas.application.realtime_radar import scan_watchlist_sync
+        from atlas.constants import TW_TZ
+
+        signals = scan_watchlist_sync(codes)
+        st.session_state["radar_signals"] = signals
+        st.session_state["radar_last_update"] = datetime.now(TW_TZ).strftime("%H:%M:%S")
+
+    if scan_clicked and codes:
         with st.spinner(f"掃描 {len(codes)} 檔股票中…"):
-            signals = scan_watchlist_sync(codes)
-            st.session_state["radar_signals"] = signals
+            _do_scan(codes)
+
+    # 自動更新：用 fragment 每 30 秒觸發
+    if auto_refresh and codes:
+        @st.fragment(run_every=30)
+        def _auto_scan():
+            _do_scan(codes)
+            last = st.session_state.get("radar_last_update", "")
+            st.caption(f"🔄 自動更新中 — 上次更新：{last}")
+        _auto_scan()
 
     signals: list[dict] = st.session_state.get("radar_signals", [])
 
@@ -63,6 +81,10 @@ def render() -> None:
     buy_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "BUY")
     sell_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "SELL")
     alert_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "ALERT")
+
+    last_update = st.session_state.get("radar_last_update", "")
+    if last_update:
+        st.caption(f"📡 最後更新：{last_update}")
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
