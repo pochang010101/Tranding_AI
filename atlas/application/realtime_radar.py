@@ -422,6 +422,17 @@ def scan_watchlist_sync(
     from atlas.constants import TW_TZ
     now_str = datetime.now(TW_TZ).strftime("%H:%M")
 
+    # 建立代碼→名稱對照表（從 TWSE/TPEx 全市場快取取得）
+    code_name_map: dict[str, str] = {}
+    try:
+        from atlas.infrastructure.twse_bulk import fetch_tpex_daily_all, fetch_twse_daily_all
+        for df_src in [fetch_twse_daily_all(), fetch_tpex_daily_all()]:
+            if not df_src.empty and "code" in df_src.columns and "name" in df_src.columns:
+                for _, row in df_src[["code", "name"]].iterrows():
+                    code_name_map[str(row["code"])] = str(row["name"])
+    except Exception:
+        pass
+
     # 批次下載歷史資料（效率遠高於逐一下載）
     tickers = [f"{c}.TWO" if is_otc(c) else f"{c}.TW" for c in codes]
     try:
@@ -460,7 +471,7 @@ def scan_watchlist_sync(
                     direction = "漲" if close >= prev_close else "跌"
                     sev = 3 if vol_ratio_5 >= 4.0 else 2 if vol_ratio_5 >= 3.0 else 1
                     results.append({
-                        "time": now_str, "detector": "爆量啟動", "code": code,
+                        "time": now_str, "detector": "爆量啟動", "code": code, "name": code_name_map.get(code, ""),
                         "direction": "BUY" if close >= prev_close else "ALERT",
                         "price": close, "severity": sev,
                         "detail": f"爆量{direction} {vol_ratio_5:.1f}x "
@@ -475,7 +486,7 @@ def scan_watchlist_sync(
                     if vol_ratio_20 >= 3.0:
                         sev = 3 if vol_ratio_20 >= 5.0 else 2
                         results.append({
-                            "time": now_str, "detector": "大單異常", "code": code,
+                            "time": now_str, "detector": "大單異常", "code": code, "name": code_name_map.get(code, ""),
                             "direction": "ALERT",
                             "price": close, "severity": sev,
                             "detail": f"量能異常 {vol_ratio_20:.1f}x 20日均量 (疑似大單進出)",
@@ -492,7 +503,7 @@ def scan_watchlist_sync(
                         label, sig_dir = "急殺", "SELL"
                         sev = 3 if change_pct <= -7.0 else 2 if change_pct <= -5.0 else 1
                     results.append({
-                        "time": now_str, "detector": "急拉急殺", "code": code,
+                        "time": now_str, "detector": "急拉急殺", "code": code, "name": code_name_map.get(code, ""),
                         "direction": sig_dir,
                         "price": close, "severity": sev,
                         "detail": f"{label} {change_pct:+.2f}% ({prev_close:.1f}→{close:.1f})",
@@ -508,7 +519,7 @@ def scan_watchlist_sync(
                     if not (pd.isna(ma8_today) or pd.isna(ma8_prev)):
                         if close_prev > ma8_prev and close < ma8_today:
                             results.append({
-                                "time": now_str, "detector": "均線跌破", "code": code,
+                                "time": now_str, "detector": "均線跌破", "code": code, "name": code_name_map.get(code, ""),
                                 "direction": "SELL",
                                 "price": close, "severity": 2,
                                 "detail": f"跌破 MA8 ({ma8_today:.1f})，"
@@ -516,7 +527,7 @@ def scan_watchlist_sync(
                             })
                         elif close_prev < ma8_prev and close > ma8_today:
                             results.append({
-                                "time": now_str, "detector": "均線突破", "code": code,
+                                "time": now_str, "detector": "均線突破", "code": code, "name": code_name_map.get(code, ""),
                                 "direction": "BUY",
                                 "price": close, "severity": 2,
                                 "detail": f"突破 MA8 ({ma8_today:.1f})，"
@@ -529,7 +540,7 @@ def scan_watchlist_sync(
                 vr = today_vol / avg_vol_5
                 if change_pct > 1.0 and vr < 0.6:
                     results.append({
-                        "time": now_str, "detector": "價量背離", "code": code,
+                        "time": now_str, "detector": "價量背離", "code": code, "name": code_name_map.get(code, ""),
                         "direction": "ALERT",
                         "price": close, "severity": 2,
                         "detail": f"價漲量縮 漲{change_pct:+.1f}% "
@@ -538,7 +549,7 @@ def scan_watchlist_sync(
                 elif change_pct < -1.0 and vr > 1.5:
                     sev = 2 if change_pct > -3.0 else 3
                     results.append({
-                        "time": now_str, "detector": "價量背離", "code": code,
+                        "time": now_str, "detector": "價量背離", "code": code, "name": code_name_map.get(code, ""),
                         "direction": "SELL",
                         "price": close, "severity": sev,
                         "detail": f"價跌量增 跌{change_pct:+.1f}% "

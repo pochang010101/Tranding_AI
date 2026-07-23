@@ -102,6 +102,7 @@ def render() -> None:
                 "時間": s.get("time", ""),
                 "偵測器": s.get("detector", ""),
                 "代碼": s.get("code", ""),
+                "名稱": s.get("name", ""),
                 "方向": direction_icon.get(raw_dir, raw_dir),
                 "觸發價": s.get("price"),
                 "嚴重度": s.get("severity", 1),
