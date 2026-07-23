@@ -67,7 +67,9 @@
       "Bash(PYTHONPATH=. python -c \"\nfrom datetime import datetime\nfrom atlas.constants import TW_TZ\nprint\\(f'UTC:    {datetime.now\\(\\).strftime\\(\\\\\"%Y/%m/%d %H:%M\\\\\"\\)}'\\)\nprint\\(f'Taiwan: {datetime.now\\(TW_TZ\\).strftime\\(\\\\\"%Y/%m/%d %H:%M\\\\\"\\)}'\\)\n\" 2>&1)",
       "Bash(PYTHONPATH=. python -c \"\nfrom atlas.application.realtime_radar import scan_watchlist_sync\nsignals = scan_watchlist_sync\\(['2330', '2317']\\)\nfor s in signals[:3]:\n    print\\(f\\\\\"{s['code']} {s['name']} | {s['detector']} | {s['direction']}\\\\\"\\)\nprint\\(f'Total signals: {len\\(signals\\)}'\\)\n\" 2>&1)",
       "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\" 2>&1)",
-      "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\" 2>&1)"
+      "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\" 2>&1)",
+      "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py'\\).read\\(\\)\\); print\\('syntax ok'\\)\")",
+      "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax ok'\\)\")"
     ]
   }
 }

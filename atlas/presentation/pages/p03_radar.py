@@ -51,8 +51,8 @@ def render() -> None:
         with col_info:
             st.caption(f"將掃描 {len(codes)} 檔股票 × 5 偵測器（爆量/大單/急拉急殺/均線/價量背離）")
 
-    # ── 執行掃描（手動或自動） ────────────────────
-    def _do_scan(codes: list[str]) -> None:
+    # ── 掃描函式 ────────────────────────────────
+    def _do_scan(codes: list[str]) -> list[dict]:
         from datetime import datetime
 
         from atlas.application.realtime_radar import scan_watchlist_sync
@@ -61,125 +61,129 @@ def render() -> None:
         signals = scan_watchlist_sync(codes)
         st.session_state["radar_signals"] = signals
         st.session_state["radar_last_update"] = datetime.now(TW_TZ).strftime("%H:%M:%S")
+        return signals
 
+    # 手動掃描（在 fragment 外，立即更新 session_state）
     if scan_clicked and codes:
         with st.spinner(f"掃描 {len(codes)} 檔股票中…"):
             _do_scan(codes)
 
-    # 自動更新：用 fragment 每 30 秒觸發
-    if auto_refresh and codes:
-        @st.fragment(run_every=30)
-        def _auto_scan():
+    # ── 訊號顯示 fragment（含自動更新） ─────────
+    run_interval = 30 if (auto_refresh and codes) else None
+
+    @st.fragment(run_every=run_interval)
+    def _radar_results():
+        # 自動更新時重新掃描
+        if run_interval and codes:
             _do_scan(codes)
-            last = st.session_state.get("radar_last_update", "")
-            st.caption(f"🔄 自動更新中 — 上次更新：{last}")
-        _auto_scan()
 
-    signals: list[dict] = st.session_state.get("radar_signals", [])
+        signals: list[dict] = st.session_state.get("radar_signals", [])
 
-    # ── 雷達狀態 ────────────────────────────────
-    buy_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "BUY")
-    sell_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "SELL")
-    alert_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "ALERT")
+        # ── 雷達狀態 ────────────────────────────
+        buy_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "BUY")
+        sell_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "SELL")
+        alert_count = sum(1 for s in signals if str(s.get("direction", "")).upper() == "ALERT")
 
-    last_update = st.session_state.get("radar_last_update", "")
-    if last_update:
-        st.caption(f"📡 最後更新：{last_update}")
+        last_update = st.session_state.get("radar_last_update", "")
+        if last_update:
+            st.caption(f"📡 最後更新：{last_update}")
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown(
-            metric_card("今日告警", str(len(signals)), status="neutral"),
-            unsafe_allow_html=True,
-        )
-    with col2:
-        st.markdown(
-            metric_card("買入訊號", str(buy_count), status="positive"),
-            unsafe_allow_html=True,
-        )
-    with col3:
-        st.markdown(
-            metric_card("賣出訊號", str(sell_count), status="negative"),
-            unsafe_allow_html=True,
-        )
-    with col4:
-        st.markdown(
-            metric_card("中性警示", str(alert_count), status="neutral"),
-            unsafe_allow_html=True,
-        )
-
-    # ── 即時訊號列表 ────────────────────────────
-    st.divider()
-    st.subheader("訊號列表")
-
-    if not signals:
-        st.info("目前無訊號。按上方「執行掃描」開始掃描觀察名單。")
-    else:
-        direction_icon = {"BUY": "🟢 BUY", "SELL": "🔴 SELL", "ALERT": "🟡 ALERT"}
-
-        rows = []
-        for s in signals:
-            raw_dir = str(s.get("direction", "")).upper()
-            rows.append({
-                "時間": s.get("time", ""),
-                "偵測器": s.get("detector", ""),
-                "代碼": s.get("code", ""),
-                "名稱": s.get("name", ""),
-                "方向": direction_icon.get(raw_dir, raw_dir),
-                "觸發價": s.get("price"),
-                "嚴重度": s.get("severity", 1),
-                "細節": s.get("detail", ""),
-            })
-
-        signals_df = pd.DataFrame(rows)
-        st.dataframe(
-            signals_df,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "嚴重度": st.column_config.NumberColumn(format="%d ⭐"),
-            },
-        )
-
-    # ── 偵測器統計 ──────────────────────────────
-    st.divider()
-    col_a, col_b = st.columns(2)
-
-    with col_a:
-        st.subheader("偵測器觸發統計")
-        if signals:
-            det_counter = Counter(
-                s.get("detector", "") for s in signals if s.get("detector")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.markdown(
+                metric_card("今日告警", str(len(signals)), status="neutral"),
+                unsafe_allow_html=True,
             )
-            if det_counter:
-                det_names, det_counts = zip(*det_counter.most_common(10), strict=False)
-                fig = bar_chart(
-                    list(det_names), list(det_counts),
-                    title="今日觸發次數", horizontal=True, height=350,
+        with col2:
+            st.markdown(
+                metric_card("買入訊號", str(buy_count), status="positive"),
+                unsafe_allow_html=True,
+            )
+        with col3:
+            st.markdown(
+                metric_card("賣出訊號", str(sell_count), status="negative"),
+                unsafe_allow_html=True,
+            )
+        with col4:
+            st.markdown(
+                metric_card("中性警示", str(alert_count), status="neutral"),
+                unsafe_allow_html=True,
+            )
+
+        # ── 即時訊號列表 ────────────────────────
+        st.divider()
+        st.subheader("訊號列表")
+
+        if not signals:
+            st.info("目前無訊號。按上方「執行掃描」開始掃描觀察名單。")
+        else:
+            direction_icon = {"BUY": "🟢 BUY", "SELL": "🔴 SELL", "ALERT": "🟡 ALERT"}
+
+            rows = []
+            for s in signals:
+                raw_dir = str(s.get("direction", "")).upper()
+                rows.append({
+                    "時間": s.get("time", ""),
+                    "偵測器": s.get("detector", ""),
+                    "代碼": s.get("code", ""),
+                    "名稱": s.get("name", ""),
+                    "方向": direction_icon.get(raw_dir, raw_dir),
+                    "觸發價": s.get("price"),
+                    "嚴重度": s.get("severity", 1),
+                    "細節": s.get("detail", ""),
+                })
+
+            signals_df = pd.DataFrame(rows)
+            st.dataframe(
+                signals_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "嚴重度": st.column_config.NumberColumn(format="%d ⭐"),
+                },
+            )
+
+        # ── 偵測器統計 ──────────────────────────
+        st.divider()
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            st.subheader("偵測器觸發統計")
+            if signals:
+                det_counter = Counter(
+                    s.get("detector", "") for s in signals if s.get("detector")
                 )
-                st.plotly_chart(fig, width="stretch")
+                if det_counter:
+                    det_names, det_counts = zip(*det_counter.most_common(10), strict=False)
+                    fig = bar_chart(
+                        list(det_names), list(det_counts),
+                        title="今日觸發次數", horizontal=True, height=350,
+                    )
+                    st.plotly_chart(fig, width="stretch")
+                else:
+                    st.info("無訊號資料。")
             else:
                 st.info("無訊號資料。")
-        else:
-            st.info("無訊號資料。")
 
-    with col_b:
-        st.subheader("熱門標的")
-        if signals:
-            code_counter = Counter(
-                s.get("code", "") for s in signals if s.get("code")
-            )
-            if code_counter:
-                hot_codes, hot_counts = zip(*code_counter.most_common(10), strict=False)
-                fig = bar_chart(
-                    list(hot_codes), list(hot_counts),
-                    title="觸發次數 by 標的", horizontal=True, height=350,
+        with col_b:
+            st.subheader("熱門標的")
+            if signals:
+                code_counter = Counter(
+                    s.get("code", "") for s in signals if s.get("code")
                 )
-                st.plotly_chart(fig, width="stretch")
+                if code_counter:
+                    hot_codes, hot_counts = zip(*code_counter.most_common(10), strict=False)
+                    fig = bar_chart(
+                        list(hot_codes), list(hot_counts),
+                        title="觸發次數 by 標的", horizontal=True, height=350,
+                    )
+                    st.plotly_chart(fig, width="stretch")
+                else:
+                    st.info("無訊號資料。")
             else:
                 st.info("無訊號資料。")
-        else:
-            st.info("無訊號資料。")
+
+    _radar_results()
 
     # ── 持倉即時損益 ────────────────────────────
     st.divider()
