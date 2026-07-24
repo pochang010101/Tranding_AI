@@ -69,7 +69,8 @@
       "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\" 2>&1)",
       "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\" 2>&1)",
       "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py'\\).read\\(\\)\\); print\\('syntax ok'\\)\")",
-      "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax ok'\\)\")"
+      "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax ok'\\)\")",
+      "Bash(where python:*)"
     ]
   }
 }
