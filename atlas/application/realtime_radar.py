@@ -420,7 +420,7 @@ def scan_watchlist_sync(
 
     results: list[dict[str, Any]] = []
     from atlas.constants import TW_TZ
-    now_str = datetime.now(TW_TZ).strftime("%H:%M")
+    now_str = datetime.now(TW_TZ).strftime("%H:%M:%S")
 
     # 建立代碼→名稱對照表（從 TWSE/TPEx 全市場快取取得）
     code_name_map: dict[str, str] = {}
