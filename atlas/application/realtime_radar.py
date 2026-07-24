@@ -401,6 +401,17 @@ class RealtimeRadar(IRealtimeRadar):
 # 同步掃描函數（供 Streamlit UI 直接呼叫）
 # ══════════════════════════════════════════════
 
+
+def _safe_int(v: Any) -> int:
+    """安全轉換為整數（處理逗號、空值、非數字）。"""
+    if v is None or v == "--" or v == "" or v == "-":
+        return 0
+    try:
+        return int(float(str(v).replace(",", "").strip()))
+    except (ValueError, TypeError):
+        return 0
+
+
 def scan_watchlist_sync(
     codes: list[str],
     indicator_lib: Any = None,
@@ -462,6 +473,19 @@ def scan_watchlist_sync(
             close = float(df["close"].iloc[-1])
             prev_close = float(df["close"].iloc[-2])
             today_vol = float(df["volume"].iloc[-1])
+
+            # --- 融資融券偵測器資料 ---
+            margin_info = None
+            try:
+                from atlas.infrastructure.margin_data import fetch_tpex_margin_all, fetch_twse_margin_all
+                from atlas.constants import is_otc
+                margin_df = fetch_tpex_margin_all() if is_otc(code) else fetch_twse_margin_all()
+                if not margin_df.empty:
+                    match = margin_df[margin_df["code"] == code]
+                    if not match.empty:
+                        margin_info = match.iloc[0].to_dict()
+            except Exception:
+                pass
 
             # --- 爆量啟動 ---
             avg_vol_5 = float(df["volume"].iloc[-6:-1].mean())
@@ -555,6 +579,57 @@ def scan_watchlist_sync(
                         "detail": f"價跌量增 跌{change_pct:+.1f}% "
                                   f"量達 {vr:.0%} 均量（恐慌賣壓）",
                     })
+
+            # --- 券資比異常 ---
+            if margin_info:
+                m_bal = _safe_int(margin_info.get("margin_balance", 0))
+                s_bal = _safe_int(margin_info.get("short_balance", 0))
+                if m_bal > 0:
+                    sr_ratio = s_bal / m_bal * 100
+                    if sr_ratio >= 30:
+                        sev = 3 if sr_ratio >= 50 else 2
+                        results.append({
+                            "time": now_str, "detector": "券資比異常", "code": code,
+                            "name": code_name_map.get(code, ""),
+                            "direction": "BUY",
+                            "price": close, "severity": sev,
+                            "detail": f"券資比 {sr_ratio:.1f}%（融資{m_bal}張/融券{s_bal}張），具軋空潛力",
+                        })
+
+            # --- 融資暴增 ---
+            if margin_info:
+                m_buy = _safe_int(margin_info.get("margin_buy", 0))
+                m_sell = _safe_int(margin_info.get("margin_sell", 0))
+                m_bal = _safe_int(margin_info.get("margin_balance", 0))
+                m_change = m_buy - m_sell
+                if m_bal > 0 and abs(m_change) > m_bal * 0.05:
+                    if m_change > 0:
+                        sig_dir = "ALERT" if close >= prev_close else "SELL"
+                        label = "散戶追高" if close >= prev_close else "散戶攤平"
+                        sev = 2 if m_change > m_bal * 0.1 else 1
+                        results.append({
+                            "time": now_str, "detector": "融資暴增", "code": code,
+                            "name": code_name_map.get(code, ""),
+                            "direction": sig_dir,
+                            "price": close, "severity": sev,
+                            "detail": f"融資增加 {m_change} 張（餘額 {m_bal} 張），{label}警戒",
+                        })
+
+            # --- 斷頭警戒 ---
+            if margin_info:
+                m_bal = _safe_int(margin_info.get("margin_balance", 0))
+                m_limit = _safe_int(margin_info.get("margin_limit", 0))
+                if m_bal > 0 and m_limit > 0:
+                    usage_pct = m_bal / m_limit * 100
+                    if usage_pct >= 60:
+                        sev = 3 if usage_pct >= 80 else 2
+                        results.append({
+                            "time": now_str, "detector": "斷頭警戒", "code": code,
+                            "name": code_name_map.get(code, ""),
+                            "direction": "SELL",
+                            "price": close, "severity": sev,
+                            "detail": f"融資使用率 {usage_pct:.1f}%（餘額{m_bal}/限額{m_limit}），融資過熱",
+                        })
 
         except Exception as exc:
             logger.debug("scan_watchlist_sync %s: %s", code, exc)
