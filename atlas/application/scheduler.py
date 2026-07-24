@@ -143,7 +143,7 @@ class Scheduler(ISchedulerService):
             # name, cron (M H * * DOW), workflow
             ("tw_pre_market", "0 8 * * 1-5", "pre_market"),
             ("tw_intraday", "0 9 * * 1-5", "intraday"),
-            ("tw_post_market", "45 13 * * 1-5", "post_market"),
+            ("tw_post_market", "30 17 * * 1-5", "post_market"),
             ("tw_monthly_rebuild", "0 20 * * 0", "monthly_rebuild"),
             # 維運排程（非交易日亦執行）
             ("daily_backup", "0 14 * * *", "backup_db"),
