@@ -71,7 +71,8 @@
       "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py'\\).read\\(\\)\\); print\\('syntax ok'\\)\")",
       "Bash(PYTHONPATH=. python -c \"import ast; ast.parse\\(open\\('atlas/presentation/pages/p03_radar.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax ok'\\)\")",
       "Bash(where python:*)",
-      "Bash(PYTHONPATH=. python -c \"from atlas.domain.margin_analysis import MarginAnalyzer, MarginSignal; print\\('OK'\\)\")"
+      "Bash(PYTHONPATH=. python -c \"from atlas.domain.margin_analysis import MarginAnalyzer, MarginSignal; print\\('OK'\\)\")",
+      "Bash(PYTHONPATH=. python -c \"\nfrom atlas.infrastructure.margin_data import fetch_twse_margin_all, fetch_tpex_margin_all, fetch_twse_lending, fetch_margin_summary\nfrom atlas.domain.margin_analysis import MarginAnalyzer, MarginSignal\nfrom atlas.application.realtime_radar import scan_watchlist_sync\nfrom atlas.presentation.pages.p17_margin import render\nprint\\('ALL OK'\\)\n\")"
     ]
   }
 }
