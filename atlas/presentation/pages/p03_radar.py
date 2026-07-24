@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import timedelta
 
 import pandas as pd
 import streamlit as st
@@ -69,13 +70,13 @@ def render() -> None:
             _do_scan(codes)
 
     # ── 訊號顯示 fragment（含自動更新） ─────────
-    run_interval = 30 if (auto_refresh and codes) else None
+    st.session_state["radar_codes"] = codes
 
-    @st.fragment(run_every=run_interval)
+    @st.fragment(run_every=timedelta(seconds=30) if (auto_refresh and codes) else None)
     def _radar_results():
         # 自動更新時重新掃描
-        if run_interval and codes:
-            _do_scan(codes)
+        if st.session_state.get("radar_auto_refresh") and st.session_state.get("radar_codes"):
+            _do_scan(st.session_state["radar_codes"])
 
         signals: list[dict] = st.session_state.get("radar_signals", [])
 
