@@ -73,7 +73,8 @@
       "Bash(where python:*)",
       "Bash(PYTHONPATH=. python -c \"from atlas.domain.margin_analysis import MarginAnalyzer, MarginSignal; print\\('OK'\\)\")",
       "Bash(PYTHONPATH=. python -c \"\nfrom atlas.infrastructure.margin_data import fetch_twse_margin_all, fetch_tpex_margin_all, fetch_twse_lending, fetch_margin_summary\nfrom atlas.domain.margin_analysis import MarginAnalyzer, MarginSignal\nfrom atlas.application.realtime_radar import scan_watchlist_sync\nfrom atlas.presentation.pages.p17_margin import render\nprint\\('ALL OK'\\)\n\")",
-      "Bash(PYTHONPATH=. python -c \"from atlas.infrastructure.taifex_data import fetch_futures_daily, fetch_futures_institutional, fetch_put_call_ratio, fetch_top10_traders, fetch_futures_basis; print\\('OK'\\)\")"
+      "Bash(PYTHONPATH=. python -c \"from atlas.infrastructure.taifex_data import fetch_futures_daily, fetch_futures_institutional, fetch_put_call_ratio, fetch_top10_traders, fetch_futures_basis; print\\('OK'\\)\")",
+      "Bash(PYTHONPATH=. python -c \"from atlas.strategy.hedge_strategy import HedgeStrategyEngine, BasisAnalysis, HedgePosition, ChipFuturesSignal; print\\('OK'\\)\")"
     ]
   }
 }
