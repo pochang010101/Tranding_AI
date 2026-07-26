@@ -84,14 +84,16 @@ def render_sidebar() -> str:
     """, unsafe_allow_html=True)
 
     st.markdown('<div class="nav-container">', unsafe_allow_html=True)
-    cols = st.columns(len(PAGES))
-    for col, (key, icon, label) in zip(cols, PAGES, strict=False):
-        with col:
-            btn_type = "primary" if current == key else "secondary"
-            if st.button(f"{icon}{label}", key=f"nav_{key}", type=btn_type,
-                         width="stretch"):
-                st.session_state["page"] = key
-                st.rerun()
+    mid = (len(PAGES) + 1) // 2
+    for row_pages in [PAGES[:mid], PAGES[mid:]]:
+        cols = st.columns(len(row_pages))
+        for col, (key, icon, label) in zip(cols, row_pages, strict=False):
+            with col:
+                btn_type = "primary" if current == key else "secondary"
+                if st.button(f"{icon}{label}", key=f"nav_{key}", type=btn_type,
+                             width="stretch"):
+                    st.session_state["page"] = key
+                    st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
     return current
