@@ -60,6 +60,7 @@ def main() -> None:
         "smart_money":  "atlas.presentation.pages.p15_smart_money",
         "factor_health": "atlas.presentation.pages.p16_factor_health",
         "margin":         "atlas.presentation.pages.p17_margin",
+        "hedge":          "atlas.presentation.pages.p18_hedge",
     }
 
     module_path = page_map.get(page, page_map["dashboard"])

@@ -20,6 +20,7 @@ PAGES = [
     ("price_levels",  "📐", "價位"),
     ("smart_money",   "🏦", "主力"),
     ("margin",        "💰", "籌碼"),
+    ("hedge",         "🛡️", "對沖"),
     ("factor_health", "🔬", "因子"),
     ("scheduler",     "⏰", "排程"),
     ("settings",      "⚙️", "設定"),
