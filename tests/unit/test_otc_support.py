@@ -17,14 +17,14 @@ class TestConstants:
     def test_is_otc_known_codes(self):
         from atlas.constants import is_otc
 
-        known_otc = ["5269", "6488", "6669", "3293", "8069", "6147", "3529", "6770", "8454", "5871"]
+        known_otc = ["5269", "6488", "3293", "8069", "6147", "3529", "6770", "8454", "5871"]
         for code in known_otc:
             assert is_otc(code), f"{code} should be OTC"
 
     def test_is_otc_tse_codes(self):
         from atlas.constants import is_otc
 
-        tse_codes = ["2330", "2454", "2317", "1301", "3711"]
+        tse_codes = ["2330", "2454", "2317", "1301", "3711", "6669"]
         for code in tse_codes:
             assert not is_otc(code), f"{code} should NOT be OTC"
 
@@ -46,7 +46,6 @@ class TestDataManagerOTC:
     def test_tw_code_to_yf_otc_suffix(self):
         from atlas.infrastructure.data_manager import _tw_code_to_yf
 
-        assert _tw_code_to_yf("6669") == "6669.TWO"
         assert _tw_code_to_yf("5269") == "5269.TWO"
         assert _tw_code_to_yf("6488") == "6488.TWO"
 
@@ -64,7 +63,6 @@ class TestQuoteAdapterOTC:
     def test_twse_ex_ch_otc_prefix(self):
         from atlas.infrastructure.quote_adapter import TWSEQuoteSource
 
-        assert TWSEQuoteSource._to_ex_ch("6669") == "otc_6669.tw"
         assert TWSEQuoteSource._to_ex_ch("5269") == "otc_5269.tw"
 
     def test_twse_ex_ch_tse_prefix(self):
@@ -78,7 +76,6 @@ class TestQuoteAdapterOTC:
         from atlas.infrastructure.quote_adapter import YFinanceQuoteSource
 
         src = YFinanceQuoteSource(MarketType.TW)
-        assert src._to_yf_ticker("6669") == "6669.TWO"
         assert src._to_yf_ticker("5269") == "5269.TWO"
 
     def test_yfinance_ticker_tse(self):
