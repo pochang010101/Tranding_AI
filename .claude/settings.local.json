@@ -84,7 +84,8 @@
       "Bash(PYTHONPATH=. PYTHONIOENCODING=utf-8 python -X utf8 -c \"\nfrom atlas.application.hedge_advisor import HedgeAdvisor\n\nadvisor = HedgeAdvisor\\(\\)\n\nprint\\('=== Market Overview ==='\\)\nov = advisor.market_overview\\(\\)\nprint\\(f'Direction: {ov[\\\\\"market_direction\\\\\"]}'\\)\nprint\\(f'Detail: {ov[\\\\\"market_detail\\\\\"]}'\\)\nprint\\(f'Suggestion: {ov[\\\\\"hedge_suggestion\\\\\"]}'\\)\n\nfor code, lots in [\\('3231', 5\\), \\('6669', 0\\), \\('2330', 10\\)]:\n    print\\(f'\\\\n=== {code} \\({lots} lots\\) ==='\\)\n    adv = advisor.analyze_stock\\(code, stock_lots=lots\\)\n    print\\(f'{adv.code} {adv.name} | Price: {adv.current_price}'\\)\n    print\\(f'Margin: {adv.margin_balance:,} \\(chg:{adv.margin_change:+,}\\) | Short: {adv.short_balance:,} | SR: {adv.short_margin_ratio:.1f}%'\\)\n    print\\(f'Inst: {adv.institutional_net:,} | Direction: {adv.direction} {adv.confidence}'\\)\n    print\\(f'Action: {adv.stock_action}/{adv.futures_action} | Type: {adv.hedge_type}'\\)\n    print\\(f'Entry={adv.entry_price} SL={adv.stop_loss} TP={adv.take_profit}'\\)\n    print\\(f'Reasoning: {adv.reasoning}'\\)\n\" 2>&1)",
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_otc_support.py -x --tb=short)",
       "Bash(taskkill //F //PID 26296)",
-      "Bash(PYTHONPATH=. python -c \"from atlas.presentation.pages.p18_hedge import render; print\\('import OK'\\)\" 2>&1)"
+      "Bash(PYTHONPATH=. python -c \"from atlas.presentation.pages.p18_hedge import render; print\\('import OK'\\)\" 2>&1)",
+      "Bash(PYTHONPATH=. python -c \"from atlas.presentation.pages.p18_hedge import render; print\\(''''OK''''\\)\")"
     ]
   }
 }

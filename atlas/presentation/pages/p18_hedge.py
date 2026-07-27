@@ -90,27 +90,29 @@ def render() -> None:
             overview = _fetch_overview()
 
         if overview:
-            futures_close = overview.get("futures_close", 0)
-            basis = overview.get("basis", 0)
-            foreign_net = overview.get("foreign_net_oi", 0)
-            pc_ratio = overview.get("pc_ratio", 0.0)
-            direction = overview.get("direction", "NEUTRAL")
-            confidence = overview.get("confidence", 0)
+            basis_info = overview.get("basis", {})
+            basis_pct = basis_info.get("basis_pct", 0.0) if isinstance(basis_info, dict) else 0.0
+            inst_info = overview.get("institutional_futures", {})
+            foreign_net = inst_info.get("foreign_net", 0) if isinstance(inst_info, dict) else 0
+            pc_ratio = overview.get("put_call_ratio", 0.0)
+            direction = overview.get("market_direction", "NEUTRAL")
+            market_detail = overview.get("market_detail", "")
+            hedge_suggestion = overview.get("hedge_suggestion", "")
 
-            basis_text, basis_status = _basis_label(basis)
+            basis_text = f"{'正' if basis_pct > 0 else '逆'}價差 {basis_pct:.2f}%" if basis_pct != 0 else "平水"
+            basis_status = "positive" if basis_pct > 0.1 else "negative" if basis_pct < -0.1 else "neutral"
             pc_text, pc_status = _pc_ratio_label(pc_ratio)
 
             cols = st.columns(4)
             with cols[0]:
                 st.markdown(metric_card(
-                    "台指期收盤", f"{futures_close:,.0f}",
-                    delta=basis_text,
+                    "基差狀態", basis_text,
                     status=basis_status,
                 ), unsafe_allow_html=True)
             with cols[1]:
                 net_status = "positive" if foreign_net > 0 else "negative" if foreign_net < 0 else "neutral"
                 st.markdown(metric_card(
-                    "外資期貨淨部位", f"{foreign_net:+,.0f} 口",
+                    "外資期貨淨部位", f"{foreign_net:+,} 口",
                     status=net_status,
                 ), unsafe_allow_html=True)
             with cols[2]:
@@ -126,28 +128,34 @@ def render() -> None:
                     else "neutral"
                 )
                 st.markdown(metric_card(
-                    "大盤方向判定", f"{_direction_emoji(direction)} {direction}",
-                    delta=f"信心度 {confidence}%",
+                    "大盤方向", f"{_direction_emoji(direction)} {direction}",
                     status=dir_status,
                 ), unsafe_allow_html=True)
 
+            # 大盤分析摘要
+            if market_detail:
+                st.info(f"📊 {market_detail}")
+            if hedge_suggestion:
+                st.success(f"💡 {hedge_suggestion}")
+
             # 三大法人期貨未平倉表格
-            institution_data = overview.get("institution_oi", [])
-            if institution_data:
-                inst_df = pd.DataFrame(institution_data)
-                display_cols = {
-                    "identity": "法人",
-                    "long_position": "多方未平倉",
-                    "short_position": "空方未平倉",
-                    "net_position": "淨部位",
-                }
-                rename_map = {k: v for k, v in display_cols.items() if k in inst_df.columns}
-                inst_df = inst_df.rename(columns=rename_map)
-                st.dataframe(
-                    inst_df[[v for v in display_cols.values() if v in inst_df.columns]],
-                    hide_index=True,
-                    use_container_width=True,
-                )
+            try:
+                from atlas.infrastructure.taifex_data import fetch_futures_institutional
+                inst_df = fetch_futures_institutional()
+                if not inst_df.empty:
+                    display_df = inst_df.rename(columns={
+                        "identity": "法人",
+                        "long_volume": "多方交易量",
+                        "short_volume": "空方交易量",
+                        "long_position": "多方未平倉",
+                        "short_position": "空方未平倉",
+                        "net_position": "淨部位",
+                    })
+                    show_cols = [c for c in ["法人", "多方未平倉", "空方未平倉", "淨部位"] if c in display_df.columns]
+                    if show_cols:
+                        st.dataframe(display_df[show_cols], hide_index=True, use_container_width=True)
+            except Exception:
+                pass
         else:
             st.info("期貨概覽資料暫無法取得（HedgeAdvisor 模組尚未建置或非交易時段）。")
 
@@ -174,110 +182,81 @@ def render() -> None:
         try:
             with st.spinner(f"分析 {code} 對沖策略..."):
 
-                @st.cache_data(ttl=300)
-                def _fetch_stock_hedge(_code: str, _lots: int) -> dict:
-                    try:
-                        from atlas.application.hedge_advisor import HedgeAdvisor
+                from atlas.application.hedge_advisor import HedgeAdvisor, HedgeAdvice
 
-                        advisor = HedgeAdvisor()
-                        return advisor.analyze_stock(_code, _lots)
-                    except ImportError:
-                        return {}
+                advisor = HedgeAdvisor()
+                adv: HedgeAdvice = advisor.analyze_stock(code, hold_lots)
 
-                result = _fetch_stock_hedge(code, hold_lots)
+            # ── 籌碼面指標 ──
+            card_cols = st.columns(4)
+            with card_cols[0]:
+                chg_status = "negative" if adv.margin_change > 500 else "positive" if adv.margin_change < -500 else "neutral"
+                st.markdown(metric_card(
+                    "融資餘額", f"{adv.margin_balance:,} 張",
+                    delta=f"增減 {adv.margin_change:+,}",
+                    status=chg_status,
+                ), unsafe_allow_html=True)
+            with card_cols[1]:
+                sr_status = "positive" if adv.short_margin_ratio > 30 else "neutral"
+                st.markdown(metric_card(
+                    "融券餘額", f"{adv.short_balance:,} 張",
+                    delta=f"券資比 {adv.short_margin_ratio:.1f}%",
+                    status=sr_status,
+                ), unsafe_allow_html=True)
+            with card_cols[2]:
+                inst_lots = adv.institutional_net // 1000
+                inst_status = "positive" if inst_lots > 0 else "negative" if inst_lots < 0 else "neutral"
+                st.markdown(metric_card(
+                    "法人買賣超", f"{inst_lots:+,} 張",
+                    status=inst_status,
+                ), unsafe_allow_html=True)
+            with card_cols[3]:
+                st.markdown(metric_card(
+                    "現價", f"{adv.current_price:,.1f}",
+                    status="neutral",
+                ), unsafe_allow_html=True)
 
-            if result:
-                # ── 籌碼面指標 ──
-                chip = result.get("chip_data", {})
-                card_cols = st.columns(4)
-                with card_cols[0]:
-                    margin_bal = chip.get("margin_balance", 0)
-                    margin_chg = chip.get("margin_change", 0)
-                    chg_status = "negative" if margin_chg > 500 else "positive" if margin_chg < -500 else "neutral"
-                    st.markdown(metric_card(
-                        "融資餘額", f"{margin_bal:,} 張",
-                        delta=f"增減 {margin_chg:+,}",
-                        status=chg_status,
-                    ), unsafe_allow_html=True)
-                with card_cols[1]:
-                    short_bal = chip.get("short_balance", 0)
-                    sr_ratio = chip.get("short_margin_ratio", 0.0)
-                    sr_status = "positive" if sr_ratio > 30 else "neutral"
-                    st.markdown(metric_card(
-                        "融券餘額", f"{short_bal:,} 張",
-                        delta=f"券資比 {sr_ratio:.1f}%",
-                        status=sr_status,
-                    ), unsafe_allow_html=True)
-                with card_cols[2]:
-                    inst_net = chip.get("institutional_net", 0)
-                    inst_status = "positive" if inst_net > 0 else "negative" if inst_net < 0 else "neutral"
-                    st.markdown(metric_card(
-                        "法人買賣超", f"{inst_net:+,} 張",
-                        status=inst_status,
-                    ), unsafe_allow_html=True)
-                with card_cols[3]:
-                    lending = chip.get("lending_balance", 0)
-                    st.markdown(metric_card(
-                        "借券餘額", f"{lending:,} 張",
-                        status="neutral",
-                    ), unsafe_allow_html=True)
+            # ── 方向判定 ──
+            dir_cls = _direction_color(adv.direction)
+            st.markdown(
+                f'<div class="legend-box">'
+                f'<strong>方向判定：</strong>'
+                f'<span class="{dir_cls}">'
+                f'{_direction_emoji(adv.direction)} {adv.direction} — 信心度 {adv.confidence}'
+                f'</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
-                # ── 策略建議卡片 ──
-                strategy = result.get("strategy", {})
-                direction = strategy.get("direction", "NEUTRAL")
-                confidence = strategy.get("confidence", 0)
-                dir_cls = _direction_color(direction)
+            # ── 策略建議卡片 ──
+            with st.container(border=True):
+                st.subheader(f"策略類型：{adv.hedge_type}")
 
-                st.markdown(
-                    f'<div class="legend-box">'
-                    f'<strong>方向判定：</strong>'
-                    f'<span class="{dir_cls}">'
-                    f'{_direction_emoji(direction)} {direction} — 信心度 {confidence}%'
-                    f'</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+                op_cols = st.columns(2)
+                with op_cols[0]:
+                    st.markdown(f"**現貨操作：** {adv.stock_action}")
+                with op_cols[1]:
+                    st.markdown(f"**期貨操作：** {adv.futures_action}")
 
-                strategy_type = strategy.get("strategy_type", "—")
-                spot_action = strategy.get("spot_action", "—")
-                futures_action = strategy.get("futures_action", "—")
-                entry_price = strategy.get("entry_price", 0)
-                stop_loss = strategy.get("stop_loss", 0)
-                take_profit = strategy.get("take_profit", 0)
-                risk_reward = strategy.get("risk_reward_ratio", 0)
-                reasoning = strategy.get("reasoning", "")
-                action_steps = strategy.get("action_steps", [])
-                risk_warning = strategy.get("risk_warning", "")
+                price_cols = st.columns(4)
+                with price_cols[0]:
+                    st.metric("進場價", f"{adv.entry_price:,.1f}")
+                with price_cols[1]:
+                    st.metric("停損", f"{adv.stop_loss:,.1f}")
+                with price_cols[2]:
+                    st.metric("停利", f"{adv.take_profit:,.1f}")
+                with price_cols[3]:
+                    st.metric("風報比", f"{adv.risk_reward:.2f}")
 
-                with st.container(border=True):
-                    st.subheader(f"策略類型：{strategy_type}")
-
-                    op_cols = st.columns(2)
-                    with op_cols[0]:
-                        st.markdown(f"**現貨操作：** {spot_action}")
-                    with op_cols[1]:
-                        st.markdown(f"**期貨操作：** {futures_action}")
-
-                    price_cols = st.columns(4)
-                    with price_cols[0]:
-                        st.metric("進場價", f"{entry_price:,.1f}")
-                    with price_cols[1]:
-                        st.metric("停損", f"{stop_loss:,.1f}")
-                    with price_cols[2]:
-                        st.metric("停利", f"{take_profit:,.1f}")
-                    with price_cols[3]:
-                        st.metric("風報比", f"{risk_reward:.2f}")
-
-                    if reasoning:
-                        st.markdown(f"**分析理由：** {reasoning}")
-                    if action_steps:
-                        st.markdown("**操作步驟：**")
-                        for i, step in enumerate(action_steps, 1):
-                            st.markdown(f"{i}. {step}")
-                    if risk_warning:
-                        st.warning(f"⚠️ {risk_warning}")
-            else:
-                st.info(f"無法取得 {code} 的對沖分析（HedgeAdvisor 模組尚未建置或無資料）。")
+                if adv.reasoning:
+                    st.markdown("**分析理由：**")
+                    st.text(adv.reasoning)
+                if adv.action_steps:
+                    st.markdown("**操作步驟：**")
+                    for step in adv.action_steps:
+                        st.markdown(f"- {step}")
+                if adv.risk_warning:
+                    st.warning(f"⚠️ {adv.risk_warning}")
 
         except Exception as exc:
             logger.warning("個股對沖分析失敗: %s", exc)
@@ -301,35 +280,30 @@ def render() -> None:
         try:
             with st.spinner(f"掃描 {len(codes)} 檔標的..."):
 
-                @st.cache_data(ttl=300)
-                def _batch_scan(_codes: tuple) -> list[dict]:
+                from atlas.application.hedge_advisor import HedgeAdvisor
+
+                advisor = HedgeAdvisor()
+                scan_results = []
+                for _c in codes:
                     try:
-                        from atlas.application.hedge_advisor import HedgeAdvisor
-
-                        advisor = HedgeAdvisor()
-                        results = []
-                        for _c in _codes:
-                            try:
-                                r = advisor.analyze_stock(_c, lots=1)
-                                strat = r.get("strategy", {})
-                                results.append({
-                                    "代碼": _c,
-                                    "名稱": r.get("name", _c),
-                                    "方向": strat.get("direction", "NEUTRAL"),
-                                    "信心度": strat.get("confidence", 0),
-                                    "策略": strat.get("strategy_type", "—"),
-                                    "現貨操作": strat.get("spot_action", "—"),
-                                    "期貨操作": strat.get("futures_action", "—"),
-                                    "停損": strat.get("stop_loss", 0),
-                                    "停利": strat.get("take_profit", 0),
-                                })
-                            except Exception:
-                                results.append({"代碼": _c, "名稱": _c, "方向": "N/A"})
-                        return results
-                    except ImportError:
-                        return []
-
-                scan_results = _batch_scan(tuple(codes))
+                        adv = advisor.analyze_stock(_c)
+                        inst_lots = adv.institutional_net // 1000
+                        scan_results.append({
+                            "代碼": adv.code,
+                            "名稱": adv.name,
+                            "現價": adv.current_price,
+                            "方向": adv.direction,
+                            "信心度": adv.confidence,
+                            "策略": adv.hedge_type,
+                            "現貨": adv.stock_action,
+                            "期貨": adv.futures_action,
+                            "法人(張)": f"{inst_lots:+,}",
+                            "融資增減": f"{adv.margin_change:+,}",
+                            "停損": adv.stop_loss,
+                            "停利": adv.take_profit,
+                        })
+                    except Exception:
+                        scan_results.append({"代碼": _c, "名稱": _c, "方向": "N/A"})
 
             if scan_results:
                 scan_df = pd.DataFrame(scan_results)
