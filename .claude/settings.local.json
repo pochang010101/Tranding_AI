@@ -85,7 +85,8 @@
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_otc_support.py -x --tb=short)",
       "Bash(taskkill //F //PID 26296)",
       "Bash(PYTHONPATH=. python -c \"from atlas.presentation.pages.p18_hedge import render; print\\('import OK'\\)\" 2>&1)",
-      "Bash(PYTHONPATH=. python -c \"from atlas.presentation.pages.p18_hedge import render; print\\(''''OK''''\\)\")"
+      "Bash(PYTHONPATH=. python -c \"from atlas.presentation.pages.p18_hedge import render; print\\(''''OK''''\\)\")",
+      "Bash(taskkill //F //IM python.exe)"
     ]
   }
 }
