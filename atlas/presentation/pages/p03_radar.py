@@ -37,9 +37,27 @@ def render() -> None:
 
     # ── 掃描控制 ────────────────────────────────
     with st.expander("🔧 觀察名單與掃描", expanded=True):
+        # 從選股頁面載入觀察股
+        saved_watchlist: list[str] = st.session_state.get("watchlist_codes", [])
+        col_load, col_load_info = st.columns([1, 3])
+        with col_load:
+            if st.button(
+                f"⭐ 從觀察股載入（{len(saved_watchlist)} 檔）",
+                disabled=(len(saved_watchlist) == 0),
+                use_container_width=True,
+            ):
+                st.session_state["radar_watchlist_input"] = ", ".join(saved_watchlist)
+                st.rerun()
+        with col_load_info:
+            if saved_watchlist:
+                st.caption(f"觀察股：{', '.join(saved_watchlist[:15])}{'…' if len(saved_watchlist) > 15 else ''}")
+            else:
+                st.caption("尚無觀察股，請先至 P-04 選股加入。")
+
+        default_val = st.session_state.get("radar_watchlist_input", ", ".join(_DEFAULT_WATCHLIST))
         watchlist_input = st.text_area(
             "觀察名單（逗號分隔代碼）",
-            value=", ".join(_DEFAULT_WATCHLIST),
+            value=default_val,
             height=68,
         )
         codes = [c.strip() for c in watchlist_input.replace("\n", ",").split(",") if c.strip()]
