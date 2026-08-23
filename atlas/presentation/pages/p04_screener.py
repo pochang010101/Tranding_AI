@@ -195,6 +195,22 @@ def render() -> None:
     st.divider()
     st.subheader(f"選股清單（共 {len(display_df)} 檔，顯示前 {min(top_n, len(display_df))} 檔）")
 
+    # ── 觀察股操作區（表格上方） ──
+    existing_watchlist: list[str] = st.session_state.get("watchlist_codes", [])
+    col_w1, col_w2, col_w3 = st.columns([1, 1, 2])
+    with col_w1:
+        add_watchlist_btn = st.button("⭐ 加入觀察股", type="primary", use_container_width=True)
+    with col_w2:
+        if existing_watchlist:
+            if st.button("🗑 清空觀察股", use_container_width=True):
+                st.session_state["watchlist_codes"] = []
+                st.rerun()
+    with col_w3:
+        if existing_watchlist:
+            st.info(f"觀察股 {len(existing_watchlist)} 檔：{', '.join(existing_watchlist[:10])}{'…' if len(existing_watchlist) > 10 else ''}")
+        else:
+            st.caption("勾選下方表格左側「觀察」欄，再點加入觀察股。")
+
     show_df = display_df.head(top_n).copy()
 
     # 加入勾選欄供用戶選擇觀察股
@@ -220,31 +236,18 @@ def render() -> None:
         key="screener_editor",
     )
 
-    # ── 加入觀察股按鈕 ──
-    selected = edited_df[edited_df["觀察"] == True]  # noqa: E712
-    existing_watchlist: list[str] = st.session_state.get("watchlist_codes", [])
-    n_selected = len(selected)
-    n_existing = len(existing_watchlist)
-
-    col_w1, col_w2 = st.columns([1, 2])
-    with col_w1:
-        if st.button(
-            f"⭐ 加入觀察股（{n_selected} 檔）",
-            type="primary",
-            disabled=(n_selected == 0),
-            use_container_width=True,
-        ):
+    # 處理加入觀察股
+    if add_watchlist_btn:
+        selected = edited_df[edited_df["觀察"] == True]  # noqa: E712
+        if selected.empty:
+            st.warning("請先勾選表格中要加入觀察的股票。")
+        else:
             new_codes = selected["代碼"].astype(str).tolist()
+            n_existing = len(existing_watchlist)
             merged = list(dict.fromkeys(existing_watchlist + new_codes))
             st.session_state["watchlist_codes"] = merged
             added = len(merged) - n_existing
             st.success(f"已加入 {added} 檔觀察股（去重後共 {len(merged)} 檔），可至 P-03 盤中雷達載入。")
-    with col_w2:
-        if existing_watchlist:
-            st.info(f"目前觀察股：{len(existing_watchlist)} 檔 — {', '.join(existing_watchlist[:10])}{'…' if len(existing_watchlist) > 10 else ''}")
-            if st.button("🗑 清空觀察股", use_container_width=True):
-                st.session_state["watchlist_codes"] = []
-                st.rerun()
 
     # ── 圖表區 ──
     st.divider()
