@@ -197,19 +197,21 @@ def render() -> None:
 
     # ── 觀察股操作區（表格上方） ──
     existing_watchlist: list[str] = st.session_state.get("watchlist_codes", [])
-    col_w1, col_w2, col_w3 = st.columns([1, 1, 2])
+    col_w1, col_w2, col_w3, col_w4 = st.columns([1, 1, 1, 2])
     with col_w1:
         add_watchlist_btn = st.button("⭐ 加入觀察股", type="primary", use_container_width=True)
     with col_w2:
+        add_all_btn = st.button("⭐ 全選加入觀察股", use_container_width=True)
+    with col_w3:
         if existing_watchlist:
             if st.button("🗑 清空觀察股", use_container_width=True):
                 st.session_state["watchlist_codes"] = []
                 st.rerun()
-    with col_w3:
+    with col_w4:
         if existing_watchlist:
             st.info(f"觀察股 {len(existing_watchlist)} 檔：{', '.join(existing_watchlist[:10])}{'…' if len(existing_watchlist) > 10 else ''}")
         else:
-            st.caption("勾選下方表格左側「觀察」欄，再點加入觀察股。")
+            st.caption("勾選下方表格左側「觀察」欄，再點加入觀察股；或直接點「全選加入觀察股」。")
 
     show_df = display_df.head(top_n).copy()
 
@@ -236,7 +238,16 @@ def render() -> None:
         key="screener_editor",
     )
 
-    # 處理加入觀察股
+    # 處理全選加入觀察股
+    if add_all_btn:
+        all_codes = show_df["代碼"].astype(str).tolist()
+        n_existing = len(existing_watchlist)
+        merged = list(dict.fromkeys(existing_watchlist + all_codes))
+        st.session_state["watchlist_codes"] = merged
+        added = len(merged) - n_existing
+        st.success(f"已全選加入 {added} 檔觀察股（去重後共 {len(merged)} 檔），可至 P-03 盤中雷達載入。")
+
+    # 處理勾選加入觀察股
     if add_watchlist_btn:
         selected = edited_df[edited_df["觀察"] == True]  # noqa: E712
         if selected.empty:
