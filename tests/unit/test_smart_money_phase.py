@@ -6,7 +6,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from atlas.strategy.smart_money_phase import SmartMoneyDetector, SmartMoneyPhase
+from atlas.strategy.smart_money_phase import (
+    SmartMoneyDetector,
+    SmartMoneyNarrative,
+    SmartMoneyPhase,
+    PhaseResult,
+)
 
 
 def _make_df(n: int, trend: str = "sideways", vol_mult: float = 1.0) -> pd.DataFrame:
@@ -121,3 +126,143 @@ class TestSmartMoneyDetector:
         det = SmartMoneyDetector()
         result = det.detect(df, institutional_data=inst, code="CONF")
         assert 0.0 <= result.confidence <= 1.0
+
+
+class TestGenerateNarrative:
+    """測試 generate_narrative() 中文語義結論。"""
+
+    def setup_method(self):
+        self.det = SmartMoneyDetector()
+
+    def test_accumulation_narrative(self):
+        pr = PhaseResult(
+            code="2330",
+            phase=SmartMoneyPhase.ACCUMULATION,
+            confidence=0.7,
+            chip_concentration=0.5,
+            institutional_streak=5,
+            volume_ratio=0.6,
+        )
+        narr = self.det.generate_narrative(pr)
+        assert isinstance(narr, SmartMoneyNarrative)
+        assert narr.headline == "底部吸貨"
+        assert narr.action_tag == "布局"
+        assert "2330" in narr.conclusion
+        assert "吸貨" in narr.conclusion
+
+    def test_shakeout_narrative(self):
+        pr = PhaseResult(
+            code="2317",
+            phase=SmartMoneyPhase.SHAKEOUT,
+            confidence=0.5,
+            chip_concentration=0.2,
+            institutional_streak=2,
+            volume_ratio=1.8,
+        )
+        narr = self.det.generate_narrative(pr)
+        assert narr.headline == "洗盤整理"
+        assert narr.action_tag == "觀望"
+        assert "洗盤" in narr.conclusion
+
+    def test_markup_narrative(self):
+        pr = PhaseResult(
+            code="2454",
+            phase=SmartMoneyPhase.MARKUP,
+            confidence=0.8,
+            chip_concentration=0.6,
+            institutional_streak=7,
+            volume_ratio=2.0,
+        )
+        narr = self.det.generate_narrative(pr)
+        assert narr.headline == "強勢拉抬"
+        assert narr.action_tag == "法人動作"
+        assert "拉抬" in narr.conclusion
+
+    def test_distribution_narrative(self):
+        pr = PhaseResult(
+            code="3008",
+            phase=SmartMoneyPhase.DISTRIBUTION,
+            confidence=0.7,
+            chip_concentration=-0.4,
+            institutional_streak=-5,
+            volume_ratio=2.5,
+        )
+        narr = self.det.generate_narrative(pr)
+        assert narr.headline == "高檔出貨"
+        assert narr.action_tag == "隔日沖"
+        assert "出貨" in narr.conclusion
+        assert "⚠" in narr.risk_note
+
+    def test_unknown_narrative(self):
+        pr = PhaseResult(code="9999", phase=SmartMoneyPhase.UNKNOWN, confidence=0.0)
+        narr = self.det.generate_narrative(pr)
+        assert narr.headline == "訊號不明"
+        assert narr.action_tag == "觀望"
+
+    def test_high_confidence_accumulation(self):
+        """高信心吸貨 → 結論含「強烈」。"""
+        pr = PhaseResult(
+            code="2330",
+            phase=SmartMoneyPhase.ACCUMULATION,
+            confidence=0.8,
+            chip_concentration=0.6,
+            institutional_streak=8,
+        )
+        narr = self.det.generate_narrative(pr)
+        assert "強烈" in narr.conclusion
+
+    def test_low_confidence_accumulation(self):
+        """低信心吸貨 → 結論含「小量試探」。"""
+        pr = PhaseResult(
+            code="2330",
+            phase=SmartMoneyPhase.ACCUMULATION,
+            confidence=0.25,
+            chip_concentration=0.1,
+            institutional_streak=2,
+        )
+        narr = self.det.generate_narrative(pr)
+        assert "小量試探" in narr.conclusion
+
+    def test_high_confidence_markup(self):
+        """高信心拉抬 → 結論含「加碼」。"""
+        pr = PhaseResult(
+            code="2454",
+            phase=SmartMoneyPhase.MARKUP,
+            confidence=0.7,
+            institutional_streak=5,
+        )
+        narr = self.det.generate_narrative(pr)
+        assert "加碼" in narr.conclusion
+
+    def test_low_confidence_markup(self):
+        """低信心拉抬 → 結論含「追高風險」。"""
+        pr = PhaseResult(
+            code="2454",
+            phase=SmartMoneyPhase.MARKUP,
+            confidence=0.3,
+            institutional_streak=3,
+        )
+        narr = self.det.generate_narrative(pr)
+        assert "追高風險" in narr.conclusion
+
+    def test_high_confidence_distribution(self):
+        """高信心出貨 → 結論含「明確」。"""
+        pr = PhaseResult(
+            code="3008",
+            phase=SmartMoneyPhase.DISTRIBUTION,
+            confidence=0.8,
+            institutional_streak=-6,
+        )
+        narr = self.det.generate_narrative(pr)
+        assert "明確" in narr.conclusion
+
+    def test_low_confidence_distribution(self):
+        """低信心出貨 → 結論含「減碼」。"""
+        pr = PhaseResult(
+            code="3008",
+            phase=SmartMoneyPhase.DISTRIBUTION,
+            confidence=0.25,
+            institutional_streak=-3,
+        )
+        narr = self.det.generate_narrative(pr)
+        assert "減碼" in narr.conclusion

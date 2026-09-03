@@ -6,12 +6,18 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from atlas.presentation.components.analysis_charts import (
+    institutional_flow_chart,
+    volume_profile_chart,
+)
 from atlas.presentation.components.charts import candlestick_chart
 from atlas.presentation.components.theme import get_colors
 from atlas.presentation.service_container import (
     TW_TOP_STOCKS,
+    fetch_institutional_flow,
     fetch_stock_data,
     get_indicator_lib,
+    get_price_level_calc,
     get_smc_module,
 )
 
@@ -194,6 +200,51 @@ def render() -> None:
                 col=1,
             )
 
+    # ── 支撐 / 壓力標註 ────────────────────────────
+    try:
+        plc = get_price_level_calc()
+        pl_result = plc.calculate(df, code=code)
+
+        # 支撐線（綠色虛線）
+        for sup in (pl_result.supports or [])[:3]:
+            fig.add_hline(
+                y=sup, line_dash="dash", line_color="#00c853",
+                line_width=1.2, opacity=0.7, row=1, col=1,
+                annotation_text=f"支撐 {sup:.1f}",
+                annotation_position="bottom left",
+                annotation_font=dict(size=10, color="#00c853"),
+            )
+
+        # 壓力線（紅色虛線）
+        for res in (pl_result.resistances or [])[:3]:
+            fig.add_hline(
+                y=res, line_dash="dash", line_color="#ff1744",
+                line_width=1.2, opacity=0.7, row=1, col=1,
+                annotation_text=f"壓力 {res:.1f}",
+                annotation_position="top left",
+                annotation_font=dict(size=10, color="#ff1744"),
+            )
+
+        # 大量成交區（volume profile 最高量價格帶）
+        ind_lib = get_indicator_lib()
+        vp_df = ind_lib.volume_profile(df, bins=30)
+        if not vp_df.empty:
+            top_vp = vp_df.iloc[0]
+            vp_price = float(top_vp["price_level"])
+            # 以 ATR 或價格 1% 作為矩形半寬
+            half_h = float(pl_result.atr or vp_price * 0.01)
+            fig.add_hrect(
+                y0=vp_price - half_h * 0.5,
+                y1=vp_price + half_h * 0.5,
+                fillcolor="rgba(255,193,7,0.12)",
+                line_width=0, row=1, col=1,
+                annotation_text="大量成交區",
+                annotation_font=dict(size=10, color="#ffc107"),
+                annotation_position="top right",
+            )
+    except Exception as e:
+        st.warning(f"支撐壓力標註略過：{e}")
+
     st.plotly_chart(fig, width="stretch")
 
     # ── 副圖指標 ─────────────────────────────────
@@ -317,6 +368,65 @@ def render() -> None:
             showlegend=True,
         )
         st.plotly_chart(fig_sub, width="stretch")
+
+    # ── 三大法人買賣超 ──────────────────────────────
+    try:
+        flow = fetch_institutional_flow(code)
+        if flow.get("source") != "unavailable":
+            st.subheader("三大法人買賣超")
+            flow_dates = [flow.get("date", "")]
+            flow_foreign = [flow.get("foreign_net", 0)]
+            flow_trust = [flow.get("trust_net", 0)]
+            flow_dealer = [flow.get("dealer_net", 0)]
+            flow_total = [flow.get("total_net", 0)]
+            fig_flow = institutional_flow_chart(
+                dates=flow_dates,
+                foreign=flow_foreign,
+                trust=flow_trust,
+                dealer=flow_dealer,
+                total=flow_total,
+            )
+            st.plotly_chart(fig_flow, width="stretch")
+        else:
+            st.info("法人資料尚未載入")
+    except Exception as e:
+        st.warning(f"法人買賣超圖表略過：{e}")
+
+    # ── 成本分布圖 ────────────────────────────────
+    try:
+        st.subheader("成本分布圖")
+        ind_lib_vp = get_indicator_lib()
+        vp_data = ind_lib_vp.volume_profile(df, bins=30)
+        if not vp_data.empty:
+            vp_prices = vp_data["price_level"].astype(float).tolist()
+            vp_volumes = vp_data["volume"].astype(float).tolist()
+            current_price = float(df["close"].iloc[-1])
+
+            # 從已計算的 price_level_result 取支撐壓力
+            vp_support: float | None = None
+            vp_resistance: float | None = None
+            try:
+                plc2 = get_price_level_calc()
+                pl2 = plc2.calculate(df, code=code)
+                if pl2.supports:
+                    vp_support = pl2.supports[0]
+                if pl2.resistances:
+                    vp_resistance = pl2.resistances[0]
+            except Exception:
+                pass
+
+            fig_vp = volume_profile_chart(
+                price_levels=vp_prices,
+                volumes=vp_volumes,
+                current_price=current_price,
+                support=vp_support,
+                resistance=vp_resistance,
+            )
+            st.plotly_chart(fig_vp, width="stretch")
+        else:
+            st.info("成本分布資料不足，無法繪製。")
+    except Exception as e:
+        st.warning(f"成本分布圖略過：{e}")
 
     # ── 個股資訊卡 ───────────────────────────────
     st.divider()

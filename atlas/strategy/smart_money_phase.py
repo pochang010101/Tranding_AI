@@ -37,6 +37,16 @@ class PhaseResult:
     signals: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class SmartMoneyNarrative:
+    """主力行為中文語義結論。"""
+
+    headline: str      # 標題語意，如 "高檔出貨"、"底部吸貨"
+    conclusion: str    # AI 結論段落（2-3句中文）
+    action_tag: str    # 操作標籤："隔日沖" / "法人動作" / "觀望" / "布局"
+    risk_note: str     # 風險提示
+
+
 class SmartMoneyDetector:
     """主力階段偵測器。
 
@@ -216,3 +226,122 @@ class SmartMoneyDetector:
             return SmartMoneyPhase.UNKNOWN, 0.0
 
         return best_phase, min(1.0, best_score)
+
+    # ------------------------------------------------------------------
+    # 中文語義結論
+    # ------------------------------------------------------------------
+
+    def generate_narrative(self, phase_result: PhaseResult) -> SmartMoneyNarrative:
+        """將主力階段分析結果轉為中文語義結論。"""
+        phase = phase_result.phase
+        conf = phase_result.confidence
+        streak = phase_result.institutional_streak
+        conc = phase_result.chip_concentration
+        code = phase_result.code or "個股"
+        days = abs(streak) if streak != 0 else 5
+
+        conf_label = "高" if conf >= 0.6 else "中等" if conf >= 0.3 else "低"
+
+        if phase == SmartMoneyPhase.ACCUMULATION:
+            return self._narrative_accumulation(
+                code, days, streak, conc, conf, conf_label
+            )
+        if phase == SmartMoneyPhase.SHAKEOUT:
+            return self._narrative_shakeout(code, conf, conf_label)
+        if phase == SmartMoneyPhase.MARKUP:
+            return self._narrative_markup(code, conf, conf_label)
+        if phase == SmartMoneyPhase.DISTRIBUTION:
+            return self._narrative_distribution(code, days, conf, conf_label)
+
+        # UNKNOWN
+        return SmartMoneyNarrative(
+            headline="訊號不明",
+            conclusion=(
+                f"{code} 目前主力動向不明確，信心度{conf_label}（{conf:.0%}）。"
+                "建議持續觀察籌碼與量能變化，待訊號明朗再行動。"
+            ),
+            action_tag="觀望",
+            risk_note="主力意圖尚未明朗，避免重倉操作",
+        )
+
+    @staticmethod
+    def _narrative_accumulation(
+        code: str,
+        days: int,
+        streak: int,
+        conc: float,
+        conf: float,
+        conf_label: str,
+    ) -> SmartMoneyNarrative:
+        conclusion = (
+            f"經 {days} 日主力行為綜合研判，{code} 呈現低檔量縮吸貨特徵，"
+            f"法人連續買超 {abs(streak)} 日，"
+            f"籌碼集中度 {conc:.0%}。"
+        )
+        if conf >= 0.6:
+            conclusion += "吸貨訊號強烈，建議積極關注突破訊號。"
+        else:
+            conclusion += "建議關注突破訊號，但信心度偏低，宜小量試探。"
+        return SmartMoneyNarrative(
+            headline="底部吸貨",
+            conclusion=conclusion,
+            action_tag="布局",
+            risk_note="底部吸貨階段仍有破底風險，建議分批布局並設定停損",
+        )
+
+    @staticmethod
+    def _narrative_shakeout(
+        code: str, conf: float, conf_label: str
+    ) -> SmartMoneyNarrative:
+        conclusion = (
+            f"近期 {code} 出現量增價跌後迅速回穩跡象，"
+            f"研判為主力洗盤行為，信心度{conf_label}（{conf:.0%}）。"
+        )
+        if conf >= 0.6:
+            conclusion += "短線震盪但中期偏多，可逢低布局。"
+        else:
+            conclusion += "短線震盪劇烈，建議觀望為主，等洗盤結束再進場。"
+        return SmartMoneyNarrative(
+            headline="洗盤整理",
+            conclusion=conclusion,
+            action_tag="觀望",
+            risk_note="洗盤過程波動大，勿追高殺低，等穩定後再進場",
+        )
+
+    @staticmethod
+    def _narrative_markup(
+        code: str, conf: float, conf_label: str
+    ) -> SmartMoneyNarrative:
+        conclusion = (
+            f"主力進入拉抬階段，{code} 量增價漲且法人持續加碼，"
+            f"動能強度{conf_label}（{conf:.0%}）。"
+        )
+        if conf >= 0.6:
+            conclusion += "多方氣勢強勁，回檔不破支撐可加碼。"
+        else:
+            conclusion += "注意追高風險，建議以回檔不破支撐為進場依據。"
+        return SmartMoneyNarrative(
+            headline="強勢拉抬",
+            conclusion=conclusion,
+            action_tag="法人動作",
+            risk_note="拉抬階段追高風險增加，嚴守停損紀律",
+        )
+
+    @staticmethod
+    def _narrative_distribution(
+        code: str, days: int, conf: float, conf_label: str
+    ) -> SmartMoneyNarrative:
+        conclusion = (
+            f"經 {days} 日主力行為綜合研判，{code} 顯示高檔出貨跡象，"
+            f"量大但價格無法創高，信心度{conf_label}（{conf:.0%}）。"
+        )
+        if conf >= 0.6:
+            conclusion += "出貨訊號明確，需謹慎操作與資金控管。"
+        else:
+            conclusion += "出貨跡象初現，建議減碼觀望。"
+        return SmartMoneyNarrative(
+            headline="高檔出貨",
+            conclusion=conclusion,
+            action_tag="隔日沖",
+            risk_note="⚠ 高檔出貨風險增加，建議控管倉位與停損紀律",
+        )
