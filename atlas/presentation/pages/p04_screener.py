@@ -197,7 +197,9 @@ def render() -> None:
 
     # ── 觀察股操作區（表格上方） ──
     existing_watchlist: list[str] = st.session_state.get("watchlist_codes", [])
-    col_w1, col_w2, col_w3, col_w4 = st.columns([1, 1, 1, 2])
+    col_w0, col_w1, col_w2, col_w3, col_w4 = st.columns([0.5, 1, 1, 1, 2])
+    with col_w0:
+        select_all = st.checkbox("全選", key="screener_select_all")
     with col_w1:
         add_watchlist_btn = st.button("⭐ 加入觀察股", type="primary", use_container_width=True)
     with col_w2:
@@ -215,10 +217,7 @@ def render() -> None:
 
     show_df = display_df.head(top_n).copy()
 
-    # 全選 checkbox
-    select_all = st.checkbox("全選", key="screener_select_all")
-
-    # 加入勾選欄供用戶選擇觀察股
+    # 加入勾選欄供用戶選擇觀察股（全選時預設 True）
     show_df.insert(0, "觀察", select_all)
 
     edited_df = st.data_editor(
