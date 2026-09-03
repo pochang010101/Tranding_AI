@@ -702,6 +702,107 @@ def render() -> None:  # noqa: C901
             except Exception as e:
                 st.info(f"主力語義結論載入中… ({e})")
 
+    # ══════════════════════════════════════════════
+    # Row 5 — 大戶/散戶分布（全寬 2 欄）
+    # ══════════════════════════════════════════════
+    r5c1, r5c2 = st.columns(2)
+
+    # ── 12 大戶趨勢分布 ────────────────────────────
+    with r5c1:
+        with st.container(border=True):
+            st.markdown("#### 12 大戶趨勢分布")
+            try:
+                from atlas.domain.large_trader_analysis import (
+                    LargeTraderAnalyzer,
+                )
+                from atlas.infrastructure.taifex_large_trader import (
+                    LargeTraderFetcher,
+                )
+
+                fetcher = LargeTraderFetcher()
+                lt_data = fetcher.fetch()
+                if lt_data:
+                    analyzer = LargeTraderAnalyzer()
+                    lt_signal = analyzer.analyze(lt_data)
+
+                    # 大戶買賣盤 gauge
+                    lg_metrics = [
+                        {"name": "大戶買盤", "value": int(lt_signal.large_buy_pct)},
+                        {"name": "散戶買盤", "value": int(lt_signal.retail_buy_pct)},
+                        {"name": "散戶賣壓", "value": int(lt_signal.retail_sell_pct)},
+                    ]
+                    fig = gauge_rings(lg_metrics, columns=3, height=200, dark=dark)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    # 訊號文字
+                    sig_color = (
+                        c["positive"] if "偏多" in lt_signal.signal
+                        else c["negative"] if "偏空" in lt_signal.signal
+                        else c["warning"]
+                    )
+                    st.markdown(
+                        f"<div style='text-align:center; font-size:20px; "
+                        f"font-weight:700; color:{sig_color};'>"
+                        f"大戶：{lt_signal.signal}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.caption(f"信心度：{lt_signal.confidence}% | 資料日期：{lt_data.date}")
+                else:
+                    st.info("大額交易人資料暫無法取得（非交易日或盤中）")
+            except Exception as e:
+                st.info(f"大戶分布載入中… ({e})")
+
+    # ── 13 散戶動向（反指標）────────────────────────
+    with r5c2:
+        with st.container(border=True):
+            st.markdown("#### 13 散戶動向（反指標）")
+            try:
+                if lt_data and lt_signal:
+                    # 散戶多空能量條
+                    retail_bull = lt_signal.retail_buy_pct
+                    retail_bear = lt_signal.retail_sell_pct
+                    fig = energy_bar(
+                        retail_bull, retail_bear,
+                        title="散戶多空能量", height=100, dark=dark,
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    # 散戶訊號
+                    retail_color = (
+                        c["negative"] if "追漲" in lt_signal.retail_signal
+                        else c["positive"] if "殺跌" in lt_signal.retail_signal
+                        else c["warning"]
+                    )
+                    st.markdown(
+                        f"<div style='text-align:center; font-size:20px; "
+                        f"font-weight:700; color:{retail_color};'>"
+                        f"散戶：{lt_signal.retail_signal}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        "<div style='text-align:center; font-size:13px; "
+                        "color:gray;'>⚠ 散戶動向為反指標："
+                        "散戶追漲時宜謹慎，散戶殺跌時可留意機會</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    # 大戶 vs 散戶對比表
+                    st.divider()
+                    st.markdown(
+                        f"| 指標 | 大戶（前十大） | 散戶 |\n"
+                        f"|------|:---:|:---:|\n"
+                        f"| 買盤 | **{lt_signal.large_buy_pct:.1f}%** "
+                        f"| {lt_signal.retail_buy_pct:.1f}% |\n"
+                        f"| 賣壓 | **{lt_signal.large_sell_pct:.1f}%** "
+                        f"| {lt_signal.retail_sell_pct:.1f}% |\n"
+                        f"| 訊號 | {lt_signal.signal} "
+                        f"| {lt_signal.retail_signal} |"
+                    )
+                else:
+                    st.info("散戶動向資料暫無法取得")
+            except Exception as e:
+                st.info(f"散戶動向載入中… ({e})")
+
     # Footer
     st.divider()
     from datetime import datetime
