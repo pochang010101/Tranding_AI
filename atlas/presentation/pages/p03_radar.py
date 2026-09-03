@@ -15,6 +15,7 @@ from atlas.presentation.components.charts import bar_chart
 from atlas.presentation.components.theme import get_colors, metric_card
 from atlas.presentation.service_container import (
     fetch_stock_quote,
+    get_realtime_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -128,11 +129,67 @@ def render() -> None:
 
     # 手動掃描 或 載入後自動掃描
     if (scan_clicked or auto_scan) and codes:
+        # 訂閱到 RealtimePushService（背景批次抓報價）
+        try:
+            rt_svc = get_realtime_service()
+            rt_svc.subscribe(codes)
+        except Exception as exc:
+            logger.warning("RealtimePushService 訂閱失敗：%s", exc)
+
         with st.spinner(f"掃描 {len(codes)} 檔股票中…"):
             _do_scan(codes)
 
     # ── 訊號顯示 fragment（含自動更新） ─────────
     st.session_state["radar_codes"] = codes
+
+    @st.fragment(run_every=timedelta(seconds=15) if (auto_refresh and codes) else None)
+    def _realtime_quotes_panel():
+        """即時報價面板 — 每 15 秒自動刷新，資料來自 RealtimePushService。"""
+        try:
+            rt_svc = get_realtime_service()
+            all_quotes = rt_svc.get_all()
+        except Exception:
+            all_quotes = {}
+
+        if not all_quotes:
+            st.caption("等待即時報價資料…（掃描後自動訂閱）")
+            return
+
+        st.subheader(f"📊 即時報價（{len(all_quotes)} 檔）")
+
+        rows = []
+        for code, q in sorted(all_quotes.items()):
+            price = q.get("price", 0)
+            prev = q.get("prev_close", 0)
+            change = price - prev if prev else 0
+            change_pct = (change / prev * 100) if prev else 0
+
+            rows.append({
+                "代碼": code,
+                "現價": price,
+                "漲跌": change,
+                "漲跌%": change_pct,
+                "成交量": q.get("volume", 0),
+                "最高": q.get("day_high", 0),
+                "最低": q.get("day_low", 0),
+            })
+
+        quote_df = pd.DataFrame(rows)
+        st.dataframe(
+            quote_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "現價": st.column_config.NumberColumn(format="%.2f"),
+                "漲跌": st.column_config.NumberColumn(format="%+.2f"),
+                "漲跌%": st.column_config.NumberColumn(format="%+.2f%%"),
+                "成交量": st.column_config.NumberColumn(format="%,d"),
+                "最高": st.column_config.NumberColumn(format="%.2f"),
+                "最低": st.column_config.NumberColumn(format="%.2f"),
+            },
+        )
+
+    _realtime_quotes_panel()
 
     @st.fragment(run_every=timedelta(seconds=30) if (auto_refresh and codes) else None)
     def _radar_results():
@@ -150,6 +207,16 @@ def render() -> None:
         last_update = st.session_state.get("radar_last_update", "")
         if last_update:
             st.caption(f"📡 最後更新：{last_update}")
+
+        # ── RealtimePushService 狀態 ──────────────
+        try:
+            rt_svc = get_realtime_service()
+            if rt_svc.is_running:
+                st.caption(f"📡 即時報價服務運行中（{len(rt_svc.subscribed_codes())} 檔訂閱）")
+            else:
+                st.caption("⏸ 即時報價服務未啟動")
+        except Exception:
+            st.caption("⏸ 即時報價服務不可用")
 
         col1, col2, col3, col4 = st.columns(4)
         with col1:

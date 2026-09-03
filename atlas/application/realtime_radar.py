@@ -639,4 +639,47 @@ def scan_watchlist_sync(
 
     # 按嚴重度降序
     results.sort(key=lambda x: x.get("severity", 0), reverse=True)
+
+    # 推播重要訊號
+    _notify_signals(results)
+
     return results
+
+
+def _notify_signals(signals: list[dict[str, Any]]) -> None:
+    """將重要訊號推播到通知管道。"""
+    try:
+        from atlas.application.signal_notifier import SignalNotifier
+
+        hub = None
+        # 嘗試從 Streamlit service container 取得 hub
+        try:
+            from atlas.presentation.service_container import get_notification_hub
+            hub = get_notification_hub()
+        except Exception:
+            pass
+
+        # 非 Streamlit context 時直接建立 hub
+        if hub is None:
+            import os
+
+            from atlas.infrastructure.notification_hub import NotificationHub
+            hub = NotificationHub()
+
+            discord_url = os.getenv("DISCORD_WEBHOOK_URL", "")
+            if discord_url:
+                from atlas.infrastructure.notifications.discord import DiscordAdapter
+                hub.add_adapter(DiscordAdapter(discord_url))
+
+            line_token = os.getenv("LINE_CHANNEL_TOKEN", "")
+            if line_token:
+                line_secret = os.getenv("LINE_CHANNEL_SECRET", "")
+                from atlas.infrastructure.notifications.line import LineAdapter
+                hub.add_adapter(LineAdapter(line_token, line_secret))
+
+        notifier = SignalNotifier(notification_hub=hub)
+        sent = notifier.process_signals(signals)
+        if sent:
+            logger.info("推播 %d 個雷達訊號", sent)
+    except Exception as e:
+        logger.debug("訊號推播跳過：%s", e)
