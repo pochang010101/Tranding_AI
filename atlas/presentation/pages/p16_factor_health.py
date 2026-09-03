@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -12,6 +14,9 @@ import streamlit as st
 from atlas.presentation.components.charts import _apply_layout
 from atlas.presentation.components.theme import get_colors, metric_card
 from atlas.presentation.service_container import (
+    TW_TOP_STOCKS,
+    fetch_financials,
+    fetch_stock_data,
     get_daily_backtest_engine,
     get_factor_mining_engine,
 )
@@ -237,6 +242,51 @@ def _render_factor_library() -> None:
 
 # ── Tab 2: 因子 ICIR 排名 ─────────────────────────
 
+
+@st.cache_data(ttl=3600, show_spinner="計算因子 ICIR...")
+def _calc_real_icir(codes: tuple[str, ...]) -> Any:
+    """用真實 OHLCV 資料計算因子 ICIR，回傳 FactorReport 或 None。"""
+    try:
+        from atlas.strategy.factor_pipeline import FactorPipeline
+        from atlas.strategy.factor_strategies import FactorStrategyLibrary
+
+        lib = FactorStrategyLibrary()
+        pipeline = FactorPipeline(lib)
+
+        ohlcv_dict: dict[str, pd.DataFrame] = {}
+        for code in codes:
+            df = fetch_stock_data(code, "6mo")
+            if df is not None and not df.empty:
+                # 加上 date 欄位（從 index 取）
+                dfr = df.reset_index()
+                if "Date" in dfr.columns:
+                    dfr = dfr.rename(columns={"Date": "date"})
+                elif "Datetime" in dfr.columns:
+                    dfr = dfr.rename(columns={"Datetime": "date"})
+                if "date" not in dfr.columns and dfr.index.name:
+                    dfr["date"] = dfr.index
+                ohlcv_dict[code] = dfr
+
+        if len(ohlcv_dict) < 5:
+            return None
+
+        fundamentals_dict: dict[str, dict] = {}
+        for code in ohlcv_dict:
+            with contextlib.suppress(Exception):
+                fundamentals_dict[code] = fetch_financials(code)
+
+        report = pipeline.run_full_evaluation(
+            codes=list(ohlcv_dict.keys()),
+            ohlcv_dict=ohlcv_dict,
+            fundamentals_dict=fundamentals_dict,
+            forward_days=5,
+        )
+        return report
+    except Exception as exc:
+        logger.warning("_calc_real_icir 失敗: %s", exc)
+        return None
+
+
 def _render_factor_icir() -> None:
     """因子 ICIR 排名：嘗試真實計算，失敗時用模擬資料。"""
     c = get_colors()
@@ -255,33 +305,35 @@ def _render_factor_icir() -> None:
 </div>
 """, unsafe_allow_html=True)
 
-    # 嘗試用 FactorPipeline 做真實計算
-    real_data = False
-    try:
-        from atlas.strategy.factor_strategies import FactorPipeline
-        pipeline = FactorPipeline()
+    # 用前 10 檔熱門股做真實 ICIR 計算
+    codes = tuple(code for code, _ in TW_TOP_STOCKS[:10])
+    report = _calc_real_icir(codes)
 
-        with st.spinner("正在計算因子 ICIR..."):
-            result = pipeline.run_full_evaluation()
-            if result and hasattr(result, "factors") and result.factors:
-                real_data = True
-                _render_icir_from_report(result, c)
-    except ImportError:
-        pass
-    except Exception as e:
-        logger.warning("FactorPipeline 執行失敗: %s", e)
-
-    if not real_data:
+    if report is not None and hasattr(report, "factors") and report.factors:
+        _render_icir_from_report(report, c)
+    else:
         _render_icir_demo(c)
 
 
-def _render_icir_from_report(report, c: dict) -> None:
+def _render_icir_from_report(report: Any, c: dict) -> None:
     """從真實 FactorReport 渲染 ICIR 排名。"""
+    from atlas.strategy.factor_mining import FactorMiningEngine
+    from atlas.strategy.factor_strategies import FactorStrategyLibrary
+
+    st.caption("資料來源：真實 OHLCV（前 10 檔熱門股 × 6 個月）")
+
+    lib = FactorStrategyLibrary()
+    # 建立因子名稱 → 中文顯示名對照
+    factor_display: dict[str, str] = {}
+    for fd in lib.get_all():
+        factor_display[fd.name] = fd.display_name
+
     rows = []
     for f in report.factors:
         status = "✅" if f.is_valid else "❌"
         rows.append({
-            "因子": f.name,
+            "因子": factor_display.get(f.name, f.name),
+            "因子代碼": f.name,
             "IC均值": round(f.ic_mean, 4),
             "IC標準差": round(f.ic_std, 4),
             "ICIR": round(f.icir, 2),
@@ -291,6 +343,31 @@ def _render_icir_from_report(report, c: dict) -> None:
     df = pd.DataFrame(rows).sort_values("ICIR", ascending=False)
     df.insert(0, "排名", range(1, len(df) + 1))
     _render_icir_charts(df, c, is_demo=False)
+
+    # 建議權重圓環圖
+    engine = FactorMiningEngine()
+    weights = engine.suggest_weights(report)
+    if weights:
+        st.subheader("建議因子權重")
+        w_labels = [factor_display.get(k, k) for k in weights]
+        w_values = list(weights.values())
+        fig_pie = go.Figure(go.Pie(
+            labels=w_labels,
+            values=w_values,
+            hole=0.45,
+            textinfo="label+percent",
+            marker_colors=[
+                c.get("accent", "#00d4aa"),
+                c.get("accent_secondary", "#667eea"),
+                c.get("positive", "#4caf50"),
+                c.get("warning", "#ff9800"),
+                c.get("negative", "#ef5350"),
+                "#9c27b0", "#00bcd4", "#ff5722",
+                "#795548", "#607d8b",
+            ][:len(w_labels)],
+        ))
+        fig_pie = _apply_layout(fig_pie, "有效因子建議權重（依 ICIR 分配）", 350)
+        st.plotly_chart(fig_pie, use_container_width=True)
 
 
 def _render_icir_demo(c: dict) -> None:
@@ -364,105 +441,290 @@ def _render_icir_charts(df: pd.DataFrame, c: dict, *, is_demo: bool) -> None:
 
 # ── Tab 3: 多因子組合策略 ─────────────────────────
 
+
+def _build_factor_name_map() -> dict[str, str]:
+    """multi_factor.py 因子名稱 → FactorStrategyLibrary 因子名稱的映射。"""
+    return {
+        "per": "PER_low",
+        "pbr": "PBR_low",
+        "dividend_yield": "DY_high",
+        "momentum_60d": "MOM_60d",
+        "momentum_20d": "MOM_20d",
+        "momentum_120d": "MOM_120d",
+        "volume_breakout": "VOL_BREAK",
+        "revenue_growth": "REV_GROWTH",
+        "gross_margin_stability": "GM_STABLE",
+        "revenue_momentum": "REV_MOM",
+        "foreign_net_buy": "FOREIGN_STREAK",
+        "investment_trust_buy": "TRUST_STREAK",
+        "smart_money_phase": "SMART_MONEY",
+        "ma_alignment": "MA_ALIGN",
+        "macd_trend": "MACD_TREND",
+        "rsi_reversion": "RSI_REVERT",
+    }
+
+
 def _render_multi_factor() -> None:
     """多因子組合策略展示與執行。"""
     c = get_colors()
 
-    # 嘗試載入真實 MultiFactorEngine
-    _engine = None
+    # 載入真實 MultiFactorEngine
     try:
-        from atlas.strategy.factor_strategies import MultiFactorEngine
-        _engine = MultiFactorEngine()
-    except ImportError:
-        pass
+        from atlas.strategy.multi_factor import MultiFactorEngine
+        engine = MultiFactorEngine()
+        presets = engine.list_presets()
+        use_real_engine = True
+    except Exception:
+        engine = None
+        presets = []
+        use_real_engine = False
 
     st.markdown("""
 <div class="legend-box">
 <strong>使用說明</strong><br>
 選擇預設策略組合，查看因子權重配置與策略特性。<br>
-每個策略由多個因子加權組合，根據綜合得分選出 Top N 個股。
+點擊「執行選股」可用真實資料計算多因子綜合分數，選出 Top N 個股。
 </div>
 """, unsafe_allow_html=True)
+
+    # 策略列表（真實引擎優先，fallback 用內建定義）
+    if use_real_engine and presets:
+        strategy_names = [p.display_name for p in presets]
+    else:
+        strategy_names = [s["name"] for s in _MULTI_FACTOR_STRATEGIES]
 
     col_left, col_right = st.columns([1, 2])
 
     with col_left:
         st.subheader("策略清單")
-        [s["name"] for s in _MULTI_FACTOR_STRATEGIES]
-        selected_idx = 0
-        for i, s in enumerate(_MULTI_FACTOR_STRATEGIES):
+        selected_idx = st.session_state.get("mf_selected", 0)
+        for i, name in enumerate(strategy_names):
             if st.button(
-                f"{'📌 ' if i == selected_idx else ''}{s['name']}",
+                f"{'📌 ' if i == selected_idx else ''}{name}",
                 key=f"mf_btn_{i}",
                 use_container_width=True,
             ):
                 st.session_state["mf_selected"] = i
-
         selected_idx = st.session_state.get("mf_selected", 0)
-
-    strategy = _MULTI_FACTOR_STRATEGIES[selected_idx]
+        # 防越界
+        if selected_idx >= len(strategy_names):
+            selected_idx = 0
 
     with col_right:
-        st.subheader(f"📋 {strategy['name']}")
-        with st.container(border=True):
-            st.markdown(f"**策略說明：** {strategy['desc']}")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.metric("換股頻率", strategy["rebalance"])
-            with c2:
-                st.metric("選股數量", f"{strategy['top_n']} 檔")
+        if use_real_engine and presets:
+            preset = presets[selected_idx]
+            st.subheader(f"📋 {preset.display_name}")
+            with st.container(border=True):
+                st.markdown(f"**策略說明：** {preset.description}")
+                c1, c2 = st.columns(2)
+                with c1:
+                    freq_map = {
+                        "monthly": "月", "weekly": "週", "quarterly": "季",
+                    }
+                    st.metric(
+                        "換股頻率",
+                        freq_map.get(preset.rebalance_freq, preset.rebalance_freq),
+                    )
+                with c2:
+                    st.metric("選股數量", f"{preset.top_n} 檔")
 
-        # 因子權重柱狀圖
-        st.subheader("因子權重配置")
-        factor_labels = []
-        factor_weights = []
-        all_factors_map = {f["name"]: f["display"] for f in _get_all_factors()}
-        for fname, w in strategy["factors"].items():
-            label = all_factors_map.get(fname, fname)
-            factor_labels.append(label)
-            factor_weights.append(w * 100)
+            # 因子權重柱狀圖
+            st.subheader("因子權重配置")
+            factor_labels = []
+            factor_weights_pct = []
+            for fname, weight, _direction in preset.factors:
+                factor_labels.append(fname)
+                factor_weights_pct.append(weight * 100)
 
-        fig = go.Figure(go.Bar(
-            y=factor_labels,
-            x=factor_weights,
-            orientation="h",
-            marker_color=[
-                c.get("accent", "#00d4aa") if w >= 25
-                else c.get("accent_secondary", "#667eea") if w >= 15
-                else c.get("neutral", "#78909c")
-                for w in factor_weights
-            ],
-            text=[f"{w:.0f}%" for w in factor_weights],
-            textposition="outside",
-        ))
-        fig = _apply_layout(fig, "", 280)
-        fig.update_layout(
-            xaxis=dict(title="權重 (%)", range=[0, max(factor_weights) * 1.3]),
-            yaxis=dict(autorange="reversed"),
-            margin=dict(l=120, r=30, t=20, b=40),
-        )
-        st.plotly_chart(fig, use_container_width=True)
+            fig = go.Figure(go.Bar(
+                y=factor_labels,
+                x=factor_weights_pct,
+                orientation="h",
+                marker_color=[
+                    c.get("accent", "#00d4aa") if w >= 25
+                    else c.get("accent_secondary", "#667eea") if w >= 15
+                    else c.get("neutral", "#78909c")
+                    for w in factor_weights_pct
+                ],
+                text=[f"{w:.0f}%" for w in factor_weights_pct],
+                textposition="outside",
+            ))
+            fig = _apply_layout(fig, "", 280)
+            fig.update_layout(
+                xaxis=dict(
+                    title="權重 (%)",
+                    range=[0, max(factor_weights_pct) * 1.3]
+                    if factor_weights_pct else [0, 100],
+                ),
+                yaxis=dict(autorange="reversed"),
+                margin=dict(l=140, r=30, t=20, b=40),
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
-        # 執行選股按鈕
-        if _engine is not None:
+            # 執行選股按鈕
             if st.button("🚀 執行選股", type="primary", key="mf_run"):
-                with st.spinner("正在計算多因子選股..."):
-                    try:
-                        result = _engine.run(strategy)
-                        if result:
-                            st.success(f"選出 {len(result)} 檔標的")
-                            st.dataframe(
-                                pd.DataFrame(result),
-                                hide_index=True,
-                                use_container_width=True,
-                            )
-                    except Exception as e:
-                        st.error(f"選股失敗: {e}")
+                _run_multi_factor_selection(engine, preset, c)
         else:
+            # fallback：用內建定義
+            strategy = _MULTI_FACTOR_STRATEGIES[selected_idx]
+            st.subheader(f"📋 {strategy['name']}")
+            with st.container(border=True):
+                st.markdown(f"**策略說明：** {strategy['desc']}")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.metric("換股頻率", strategy["rebalance"])
+                with c2:
+                    st.metric("選股數量", f"{strategy['top_n']} 檔")
+
+            st.subheader("因子權重配置")
+            factor_labels = []
+            factor_weights_pct = []
+            all_factors_map = {
+                f["name"]: f["display"] for f in _get_all_factors()
+            }
+            for fname, w in strategy["factors"].items():
+                label = all_factors_map.get(fname, fname)
+                factor_labels.append(label)
+                factor_weights_pct.append(w * 100)
+
+            fig = go.Figure(go.Bar(
+                y=factor_labels,
+                x=factor_weights_pct,
+                orientation="h",
+                marker_color=[
+                    c.get("accent", "#00d4aa") if w >= 25
+                    else c.get("accent_secondary", "#667eea") if w >= 15
+                    else c.get("neutral", "#78909c")
+                    for w in factor_weights_pct
+                ],
+                text=[f"{w:.0f}%" for w in factor_weights_pct],
+                textposition="outside",
+            ))
+            fig = _apply_layout(fig, "", 280)
+            fig.update_layout(
+                xaxis=dict(
+                    title="權重 (%)",
+                    range=[0, max(factor_weights_pct) * 1.3]
+                    if factor_weights_pct else [0, 100],
+                ),
+                yaxis=dict(autorange="reversed"),
+                margin=dict(l=120, r=30, t=20, b=40),
+            )
+            st.plotly_chart(fig, use_container_width=True)
             st.info(
                 "MultiFactorEngine 尚未接入，"
                 "執行選股功能待模組完成後啟用。"
             )
+
+
+def _run_multi_factor_selection(engine: Any, preset: Any, c: dict) -> None:
+    """執行多因子選股（取前 30 檔股票的真實資料）。"""
+    from atlas.strategy.factor_strategies import FactorStrategyLibrary
+
+    name_map = _build_factor_name_map()
+    lib = FactorStrategyLibrary()
+    codes = [code for code, _ in TW_TOP_STOCKS[:30]]
+    stock_name_map = {code: name for code, name in TW_TOP_STOCKS}
+
+    with st.spinner("正在取得股票資料與計算因子..."):
+        # 取 OHLCV + 基本面
+        ohlcv_cache: dict[str, pd.DataFrame] = {}
+        fund_cache: dict[str, dict] = {}
+        for code in codes:
+            df = fetch_stock_data(code, "6mo")
+            if df is not None and not df.empty:
+                dfr = df.reset_index()
+                if "Date" in dfr.columns:
+                    dfr = dfr.rename(columns={"Date": "date"})
+                elif "Datetime" in dfr.columns:
+                    dfr = dfr.rename(columns={"Datetime": "date"})
+                if "date" not in dfr.columns and dfr.index.name:
+                    dfr["date"] = dfr.index
+                ohlcv_cache[code] = dfr
+            with contextlib.suppress(Exception):
+                fund_cache[code] = fetch_financials(code)
+
+        # 計算每個因子的最新值（pd.Series, index=code）
+        factor_values: dict[str, pd.Series] = {}
+        for preset_fname, _weight, _direction in preset.factors:
+            lib_fname = name_map.get(preset_fname, preset_fname)
+            values: dict[str, float] = {}
+            for code in codes:
+                if code not in ohlcv_cache:
+                    continue
+                try:
+                    series = lib.compute_factor(
+                        lib_fname,
+                        ohlcv_cache[code],
+                        fund_cache.get(code),
+                    )
+                    if series is not None and len(series) > 0:
+                        last_val = series.dropna()
+                        if len(last_val) > 0:
+                            values[code] = float(last_val.iloc[-1])
+                except Exception:
+                    pass
+            if values:
+                factor_values[preset_fname] = pd.Series(values)
+
+        if not factor_values:
+            st.warning("因子計算失敗：無法取得足夠資料。")
+            return
+
+        # 計算綜合分數
+        try:
+            result = engine.compute_composite(preset.name, factor_values)
+        except Exception as e:
+            st.error(f"選股計算失敗: {e}")
+            return
+
+    if not result.top_picks:
+        st.warning("未能選出符合條件的標的。")
+        return
+
+    st.success(f"選出 {len(result.top_picks)} 檔標的（共評估 {len(codes)} 檔）")
+
+    # 結果表格
+    rows = []
+    for rank, code in enumerate(result.top_picks, 1):
+        score = (
+            float(result.composite_scores.get(code, 0))
+            if code in result.composite_scores.index
+            else 0.0
+        )
+        rows.append({
+            "排名": rank,
+            "代碼": code,
+            "名稱": stock_name_map.get(code, ""),
+            "綜合分數": round(score, 4),
+        })
+
+    df_result = pd.DataFrame(rows)
+    st.dataframe(
+        df_result,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "綜合分數": st.column_config.NumberColumn(format="%.4f"),
+        },
+    )
+
+    # 分數柱狀圖
+    if len(rows) > 0:
+        fig = go.Figure(go.Bar(
+            x=[r["名稱"] or r["代碼"] for r in rows],
+            y=[r["綜合分數"] for r in rows],
+            marker_color=[
+                c.get("positive", "#4caf50") if r["綜合分數"] > 0
+                else c.get("negative", "#ef5350")
+                for r in rows
+            ],
+            text=[f"{r['綜合分數']:.2f}" for r in rows],
+            textposition="outside",
+        ))
+        fig = _apply_layout(fig, f"{preset.display_name} — 選股結果", 350)
+        fig.update_layout(xaxis=dict(tickangle=-45))
+        st.plotly_chart(fig, use_container_width=True)
 
 
 # ── Tab 4: 策略健康度 ─────────────────────────────
