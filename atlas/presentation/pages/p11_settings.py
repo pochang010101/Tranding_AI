@@ -91,40 +91,98 @@ def render() -> None:
         st.number_input("最大發送次數（每分鐘）", value=10, min_value=1, max_value=60)
 
         st.divider()
+        st.subheader("通知管道狀態")
+
+        channels_info = [
+            ("Discord", "DISCORD_WEBHOOK_URL", discord_ok),
+            ("LINE", "LINE_CHANNEL_TOKEN", line_ok),
+            ("Telegram", "TELEGRAM_BOT_TOKEN", telegram_ok),
+            ("Email", "SMTP_HOST", bool(os.getenv("SMTP_HOST"))),
+        ]
+        status_cols = st.columns(len(channels_info))
+        for col, (name, _env_key, configured) in zip(
+            status_cols, channels_info, strict=False,
+        ):
+            icon = "🟢" if configured else "⚪"
+            col.markdown(f"{icon} **{name}**：{'已設定' if configured else '未設定'}")
+
+        configured_count = sum(1 for *_, ok in channels_info if ok)
+        if configured_count == 0:
+            st.warning("尚未設定任何通知管道，請先至「API 金鑰」頁設定環境變數。")
+
+        st.divider()
         st.subheader("推播測試")
-        test_channel = st.selectbox("測試通道", ["Discord", "LINE", "Telegram"])
-        test_msg = st.text_input("測試訊息", value="Atlas v5.0 通知測試")
-        if st.button("📤 發送測試訊息", type="primary", width="stretch"):
-            st.info(f"正在發送至 {test_channel}...")
-            try:
-                if test_channel == "Discord" and discord_ok:
-                    import httpx
-                    webhook = os.getenv("DISCORD_WEBHOOK_URL")
-                    resp = httpx.post(webhook, json={"content": test_msg}, timeout=10)
-                    if resp.status_code in (200, 204):
-                        st.success("Discord 測試訊息發送成功！")
+        test_mode = st.radio(
+            "測試模式", ["全通道廣播", "單一通道"],
+            horizontal=True, key="notif_test_mode",
+        )
+
+        test_msg = st.text_input("測試訊息", value="Atlas v5.0 通知測試", key="notif_test_msg")
+
+        if test_mode == "單一通道":
+            test_channel = st.selectbox(
+                "測試通道", ["Discord", "LINE", "Telegram"], key="notif_test_ch",
+            )
+        else:
+            test_channel = None
+
+        if st.button("📤 發送測試通知", type="primary", key="btn_send_test_notif"):
+            from datetime import datetime as _dt
+
+            from atlas.models.notification import NotificationPayload
+            from atlas.presentation.service_container import get_notification_hub
+
+            hub = get_notification_hub()
+            if not hub._adapters:
+                st.error("NotificationHub 無任何已註冊的 adapter，請先設定環境變數。")
+            else:
+                payload = NotificationPayload(
+                    title="🧪 Atlas v5.0 通知測試",
+                    body=(
+                        f"{test_msg}\n"
+                        f"測試時間：{_dt.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        f"系統運作正常。"
+                    ),
+                    channel="all",
+                    priority=1,
+                    category="system",
+                )
+                try:
+                    import asyncio
+
+                    if test_mode == "全通道廣播":
+                        results = asyncio.run(hub.broadcast(payload))
+                        for ch_name, ok in results.items():
+                            if ok:
+                                st.success(f"✅ {ch_name} 發送成功")
+                            else:
+                                st.error(f"❌ {ch_name} 發送失敗")
                     else:
-                        st.error(f"Discord 回應：{resp.status_code}")
-                elif test_channel == "Telegram" and telegram_ok:
-                    import httpx
-                    token = os.getenv("TELEGRAM_BOT_TOKEN")
-                    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-                    if chat_id:
-                        resp = httpx.post(
-                            f"https://api.telegram.org/bot{token}/sendMessage",
-                            json={"chat_id": chat_id, "text": test_msg},
-                            timeout=10,
-                        )
-                        if resp.status_code == 200:
-                            st.success("Telegram 測試訊息發送成功！")
+                        # 單一通道：找到對應 adapter 直接送
+                        ch_map = {"Discord": "discord", "LINE": "line",
+                                  "Telegram": "telegram"}
+                        target = ch_map.get(test_channel, "")
+                        matched = [
+                            a for a in hub._adapters
+                            if a.channel_name() == target
+                        ]
+                        if not matched:
+                            st.warning(
+                                f"{test_channel} adapter 未註冊"
+                                "（環境變數未設定或為空）。"
+                            )
                         else:
-                            st.error(f"Telegram 回應：{resp.status_code}")
-                    else:
-                        st.warning("請設定 TELEGRAM_CHAT_ID 環境變數")
-                else:
-                    st.warning(f"{test_channel} 尚未設定 API 金鑰，請先至 API 金鑰頁設定。")
-            except Exception as exc:
-                st.error(f"發送失敗：{exc}")
+                            ok = asyncio.run(matched[0].send(payload))
+                            if ok:
+                                st.success(
+                                    f"✅ {test_channel} 測試訊息發送成功！"
+                                )
+                            else:
+                                st.error(
+                                    f"❌ {test_channel} 測試訊息發送失敗"
+                                )
+                except Exception as exc:
+                    st.error(f"通知發送失敗：{exc}")
 
     # ── 風控參數 ────────────────────────────────
     with tab3:
