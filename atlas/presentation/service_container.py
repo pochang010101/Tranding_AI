@@ -19,6 +19,81 @@ logger = logging.getLogger(__name__)
 
 
 @st.cache_resource
+def get_database_manager():
+    """建立 PostgreSQL 連線管理器（失敗時回傳 None）。"""
+    try:
+        from atlas.config import DatabaseConfig
+        from atlas.infrastructure.db import DatabaseManager
+        db_cfg = DatabaseConfig()
+        if not db_cfg.password:
+            logger.warning("ATLAS_DB_PASSWORD 未設定，DataManager 不可用")
+            return None
+        db = DatabaseManager(db_cfg)
+        logger.info("DatabaseManager 初始化成功：%s", db_cfg.host)
+        return db
+    except Exception as e:
+        logger.warning("DatabaseManager 初始化失敗：%s", e)
+        return None
+
+
+@st.cache_resource
+def get_cache_manager():
+    """建立 Redis 快取管理器（失敗時回傳 None）。"""
+    try:
+        from atlas.config import RedisConfig
+        from atlas.infrastructure.cache import CacheManager
+        redis_cfg = RedisConfig()
+        cache = CacheManager(redis_cfg)
+        logger.info("CacheManager 初始化成功：%s:%s", redis_cfg.host, redis_cfg.port)
+        return cache
+    except Exception as e:
+        logger.warning("CacheManager 初始化失敗：%s", e)
+        return None
+
+
+@st.cache_resource
+def get_data_manager():
+    """建立統一資料管理器（需要 DB；Cache 可選）。"""
+    db = get_database_manager()
+    if db is None:
+        logger.warning("DataManager 不可用（無 DB 連線）")
+        return None
+    try:
+        from atlas.infrastructure.data_manager import DataManager
+        cache = get_cache_manager()
+        dm = DataManager(db=db, cache=cache)
+        logger.info("DataManager 初始化成功")
+        return dm
+    except Exception as e:
+        logger.warning("DataManager 初始化失敗：%s", e)
+        return None
+
+
+@st.cache_resource
+def get_fund_flow_service():
+    """建立法人籌碼服務。"""
+    try:
+        from atlas.domain.fund_flow import FundFlowService
+        dm = get_data_manager()
+        return FundFlowService(data_manager=dm) if dm else None
+    except Exception as e:
+        logger.warning("FundFlowService 初始化失敗：%s", e)
+        return None
+
+
+@st.cache_resource
+def get_sentiment_service():
+    """建立情緒指數服務。"""
+    try:
+        from atlas.domain.sentiment import SentimentService
+        dm = get_data_manager()
+        return SentimentService(data_manager=dm) if dm else SentimentService.__new__(SentimentService)
+    except Exception as e:
+        logger.warning("SentimentService 初始化失敗：%s", e)
+        return None
+
+
+@st.cache_resource
 def get_indicator_lib():
     from atlas.strategy.indicator_lib import IndicatorLibrary
     return IndicatorLibrary()
@@ -64,7 +139,7 @@ def get_daily_backtest_engine():
 def get_scoring_engine():
     from atlas.strategy.scoring_engine import ScoringEngine
     return ScoringEngine(
-        data_manager=None,
+        data_manager=get_data_manager(),
         indicator_lib=get_indicator_lib(),
         pattern_engine=get_pattern_signal_engine(),
         smart_money=get_smart_money_detector(),
@@ -94,7 +169,7 @@ def get_conclusion_engine():
 def get_backtest_engine():
     from atlas.application.backtest_engine import BacktestEngine
     return BacktestEngine(
-        data_manager=None,
+        data_manager=get_data_manager(),
         strategy_lib=None,
         indicator_lib=get_indicator_lib(),
     )
@@ -305,36 +380,52 @@ def fetch_institutional_flow(code: str, days: int = 5) -> dict[str, Any]:
 
     @st.cache_data(ttl=1800)
     def _fetch(code: str, days: int) -> dict:
-        from datetime import date
-        today = date.today()
-        date_str = today.strftime("%Y%m%d")
+        from datetime import date, timedelta
 
-        try:
-            url = "https://www.twse.com.tw/fund/T86"
-            params = {"response": "json", "date": date_str, "selectType": "ALLBUT0999"}
-            resp = httpx.get(url, params=params, timeout=15)
-            resp.raise_for_status()
-            data = resp.json()
+        def _safe_int(v: str) -> int:
+            return int(str(v).replace(",", "").strip()) if v and v != "--" else 0
 
-            for row in data.get("data", []):
-                row_code = str(row[0]).strip()
-                if row_code == code:
-                    def _safe_int(v: str) -> int:
-                        return int(str(v).replace(",", "").strip()) if v and v != "--" else 0
+        # 往前找最多 7 個工作日（週末/假日 TWSE 不回資料）
+        check_date = date.today()
+        for _ in range(7):
+            date_str = check_date.strftime("%Y%m%d")
+            try:
+                url = "https://www.twse.com.tw/fund/T86"
+                params = {
+                    "response": "json", "date": date_str,
+                    "selectType": "ALLBUT0999",
+                }
+                resp = httpx.get(url, params=params, timeout=15)
+                resp.raise_for_status()
+                data = resp.json()
 
-                    return {
-                        "foreign_net": _safe_int(row[4]),
-                        "trust_net": _safe_int(row[7]),
-                        "dealer_net": _safe_int(row[10]),
-                        "total_net": _safe_int(row[4]) + _safe_int(row[7]) + _safe_int(row[10]),
-                        "source": "twse_t86",
-                        "date": date_str,
-                    }
-        except Exception:
-            pass
+                rows = data.get("data", [])
+                if not rows:
+                    check_date -= timedelta(days=1)
+                    continue
+
+                for row in rows:
+                    row_code = str(row[0]).strip()
+                    if row_code == code:
+                        return {
+                            "foreign_net": _safe_int(row[4]),
+                            "trust_net": _safe_int(row[7]),
+                            "dealer_net": _safe_int(row[10]),
+                            "total_net": (
+                                _safe_int(row[4]) + _safe_int(row[7])
+                                + _safe_int(row[10])
+                            ),
+                            "source": "twse_t86",
+                            "date": date_str,
+                        }
+                # 有資料但找不到該股（可能是上櫃股）
+                break
+            except Exception:
+                check_date -= timedelta(days=1)
 
         return {"foreign_net": 0, "trust_net": 0, "dealer_net": 0,
-                "total_net": 0, "source": "unavailable", "date": date_str}
+                "total_net": 0, "source": "unavailable",
+                "date": date.today().strftime("%Y%m%d")}
 
     return _fetch(code, days)
 
@@ -345,32 +436,38 @@ def fetch_margin_data(code: str) -> dict[str, Any]:
 
     @st.cache_data(ttl=1800)
     def _fetch(code: str) -> dict:
-        from datetime import date
-        today = date.today()
-        date_str = today.strftime("%Y%m%d")
+        from datetime import date, timedelta
 
-        try:
-            url = "https://www.twse.com.tw/exchangeReport/MI_MARGN"
-            params = {"response": "json", "date": date_str, "selectType": "ALL"}
-            resp = httpx.get(url, params=params, timeout=15)
-            resp.raise_for_status()
-            data = resp.json()
+        def _safe_int(v: str) -> int:
+            return int(str(v).replace(",", "").strip()) if v and v != "--" else 0
 
-            for row in data.get("creditList", []):
-                row_code = str(row[0]).strip()
-                if row_code == code:
-                    def _safe_int(v: str) -> int:
-                        return int(str(v).replace(",", "").strip()) if v and v != "--" else 0
+        check_date = date.today()
+        for _ in range(7):
+            date_str = check_date.strftime("%Y%m%d")
+            try:
+                url = "https://www.twse.com.tw/exchangeReport/MI_MARGN"
+                params = {"response": "json", "date": date_str, "selectType": "ALL"}
+                resp = httpx.get(url, params=params, timeout=15)
+                resp.raise_for_status()
+                data = resp.json()
 
-                    return {
-                        "margin_balance": _safe_int(row[6]),
-                        "margin_change": _safe_int(row[5]),
-                        "short_balance": _safe_int(row[12]),
-                        "short_change": _safe_int(row[11]),
-                        "source": "twse_margn",
-                    }
-        except Exception:
-            pass
+                if data.get("stat") != "OK":
+                    check_date -= timedelta(days=1)
+                    continue
+
+                for row in data.get("creditList", data.get("data", [])):
+                    row_code = str(row[0]).strip()
+                    if row_code == code:
+                        return {
+                            "margin_balance": _safe_int(row[6]),
+                            "margin_change": _safe_int(row[5]),
+                            "short_balance": _safe_int(row[12]),
+                            "short_change": _safe_int(row[11]),
+                            "source": "twse_margn",
+                        }
+                break  # 有資料但找不到該股
+            except Exception:
+                check_date -= timedelta(days=1)
 
         return {"margin_balance": 0, "margin_change": 0,
                 "short_balance": 0, "short_change": 0, "source": "unavailable"}
