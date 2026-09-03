@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import logging
+import os
 from collections import Counter
 from datetime import timedelta
 
@@ -13,6 +16,23 @@ from atlas.presentation.components.theme import get_colors, metric_card
 from atlas.presentation.service_container import (
     fetch_stock_quote,
 )
+
+logger = logging.getLogger(__name__)
+
+# ── 觀察股持久化路徑 ──
+_SETTINGS_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "settings.local.json")
+
+
+def _load_persisted_watchlist() -> list[str]:
+    """從 settings.local.json 讀取觀察股清單。"""
+    try:
+        if os.path.exists(_SETTINGS_PATH):
+            with open(_SETTINGS_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("watchlist_codes", [])
+    except Exception as exc:
+        logger.warning("讀取持久化觀察股失敗：%s", exc)
+    return []
 
 # 台股熱門觀察清單（預設）
 _DEFAULT_WATCHLIST = [
@@ -35,18 +55,39 @@ def render() -> None:
 """, unsafe_allow_html=True)
     get_colors()
 
+    # ── 持久化恢復：session_state 無觀察股但檔案有 → 自動載入 ──
+    try:
+        if not st.session_state.get("watchlist_codes"):
+            persisted = _load_persisted_watchlist()
+            if persisted:
+                st.session_state["watchlist_codes"] = persisted
+    except Exception:
+        pass
+
+    # ── 觀察股摘要區（頁面頂部） ────────────────
+    saved_watchlist: list[str] = st.session_state.get("watchlist_codes", [])
+    if saved_watchlist:
+        st.info(
+            f"📋 目前觀察股 **{len(saved_watchlist)}** 檔："
+            f" {', '.join(saved_watchlist[:20])}"
+            f"{'…' if len(saved_watchlist) > 20 else ''}"
+        )
+    else:
+        st.warning("尚無觀察股。請先至 **P-04 選股** 執行選股並加入觀察股，或在下方手動輸入代碼。")
+
     # ── 掃描控制 ────────────────────────────────
     with st.expander("🔧 觀察名單與掃描", expanded=True):
         # 從選股頁面載入觀察股
-        saved_watchlist: list[str] = st.session_state.get("watchlist_codes", [])
         col_load, col_load_info = st.columns([1, 3])
         with col_load:
-            if st.button(
+            load_clicked = st.button(
                 f"⭐ 從觀察股載入（{len(saved_watchlist)} 檔）",
                 disabled=(len(saved_watchlist) == 0),
                 width="stretch",
-            ):
+            )
+            if load_clicked:
                 st.session_state["radar_watchlist_input"] = ", ".join(saved_watchlist)
+                st.session_state["radar_auto_scan_after_load"] = True
                 st.rerun()
         with col_load_info:
             if saved_watchlist:
@@ -82,8 +123,11 @@ def render() -> None:
         st.session_state["radar_last_update"] = datetime.now(TW_TZ).strftime("%H:%M:%S")
         return signals
 
-    # 手動掃描（在 fragment 外，立即更新 session_state）
-    if scan_clicked and codes:
+    # 載入觀察股後自動掃描
+    auto_scan = st.session_state.pop("radar_auto_scan_after_load", False)
+
+    # 手動掃描 或 載入後自動掃描
+    if (scan_clicked or auto_scan) and codes:
         with st.spinner(f"掃描 {len(codes)} 檔股票中…"):
             _do_scan(codes)
 

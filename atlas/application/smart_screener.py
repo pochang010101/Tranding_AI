@@ -37,6 +37,11 @@ class ScreenerHit:
     is_otc: bool = False  # True = 上櫃 (TPEx)
     tags: list[str] = field(default_factory=list)
     score: float = 0.0
+    ma_arrangement: str = "—"      # "多頭" / "空頭" / "糾結"
+    ma_position: str = "—"         # "站上全部" / "站上短均" / "均線下方"
+    deduction_direction: str = "—"  # "全揚升" / "短揚長彎" / "全下彎"
+    ma_score: float = 0.0          # 均線位置分數 (0-15)
+    deduction_score: float = 0.0   # 扣抵值方向分數 (0-10)
 
 
 class SmartScreener:
@@ -220,6 +225,165 @@ class SmartScreener:
         import atlas.infrastructure.twse_bulk as twse_bulk
         return twse_bulk.last_trading_date
 
+    # ── 均線位置 / 扣抵值評分 ──────────────────────
+
+    @staticmethod
+    def _score_ma_position(df_hist: pd.DataFrame) -> tuple[int, str, str]:
+        """均線位置評分（0-15）。回傳 (score, arrangement, position)。
+
+        需要 df_hist 含 close 欄位且至少 120 筆資料。
+        """
+        if df_hist is None or df_hist.empty or len(df_hist) < 8:
+            return 0, "—", "—"
+
+        close = float(df_hist["close"].iloc[-1])
+        scores = 0
+
+        # 計算均線
+        ma_vals: dict[int, float | None] = {}
+        for period in (8, 21, 55, 120):
+            if len(df_hist) >= period:
+                ma_vals[period] = float(df_hist["close"].rolling(period).mean().iloc[-1])
+            else:
+                ma_vals[period] = None
+
+        # 價格站上各均線 +3 each (MA8, MA21, MA55)
+        above_count = 0
+        for period in (8, 21, 55):
+            if ma_vals[period] is not None and close > ma_vals[period]:
+                scores += 3
+                above_count += 1
+
+        # 均線多頭排列（MA8 > MA21 > MA55）+3
+        arrangement = "糾結"
+        if all(ma_vals[p] is not None for p in (8, 21, 55)):
+            if ma_vals[8] > ma_vals[21] > ma_vals[55]:
+                arrangement = "多頭"
+                scores += 3
+            elif ma_vals[8] < ma_vals[21] < ma_vals[55]:
+                arrangement = "空頭"
+
+        # 價格在 MA120 之上 +3（長線多頭）
+        if ma_vals[120] is not None and close > ma_vals[120]:
+            scores += 3
+
+        # 均線位置標籤
+        if above_count == 3:
+            position = "站上全部"
+        elif above_count >= 1:
+            position = "站上短均"
+        else:
+            position = "均線下方"
+
+        return min(scores, 15), arrangement, position
+
+    @staticmethod
+    def _score_deduction(df_hist: pd.DataFrame) -> tuple[int, str]:
+        """扣抵值方向評分（0-10）。回傳 (score, direction)。
+
+        扣抵值 = 今日收盤 - N 日前收盤。正值代表均線將揚升。
+        """
+        if df_hist is None or df_hist.empty or len(df_hist) < 56:
+            return 0, "—"
+
+        close_series = df_hist["close"]
+        current = float(close_series.iloc[-1])
+        scores = 0
+        ups = 0
+        downs = 0
+
+        # MA8 扣抵值: 現價 vs 8天前收盤
+        for period, pts in [(8, 4), (21, 3), (55, 3)]:
+            if len(close_series) > period:
+                deducted = float(close_series.iloc[-period])
+                if current > deducted:
+                    scores += pts
+                    ups += 1
+                else:
+                    downs += 1
+
+        # 方向標籤
+        if ups == 3:
+            direction = "全揚升"
+        elif downs == 3:
+            direction = "全下彎"
+        else:
+            direction = "短揚長彎"
+
+        return min(scores, 10), direction
+
+    @staticmethod
+    def _batch_ma_deduction(
+        codes: list[str], otc_flags: list[bool] | None = None
+    ) -> list[dict]:
+        """批次計算均線位置 + 扣抵值，回傳每支股票的 dict。"""
+        results: list[dict] = []
+        default = {
+            "ma_score": 0.0, "ma_arrangement": "—", "ma_position": "—",
+            "deduction_score": 0.0, "deduction_direction": "—",
+        }
+
+        try:
+            import yfinance as yf
+
+            if otc_flags is None:
+                otc_flags = [False] * len(codes)
+            tickers = [
+                f"{c}.TWO" if is_otc else f"{c}.TW"
+                for c, is_otc in zip(codes, otc_flags, strict=False)
+            ]
+
+            # 下載 180 天歷史（覆蓋 MA120 + 安全餘量）
+            data = yf.download(
+                tickers, period="180d", progress=False, threads=True, auto_adjust=True
+            )
+
+            if data.empty:
+                return [dict(default) for _ in codes]
+
+            close_key = "Close"
+            if isinstance(data.columns, pd.MultiIndex):
+                close_df = data[close_key] if close_key in data.columns.get_level_values(0) else data
+            else:
+                close_df = data
+
+            for i, code in enumerate(codes):
+                ticker = tickers[i]
+                try:
+                    if isinstance(close_df, pd.DataFrame) and ticker in close_df.columns:
+                        series = close_df[ticker].dropna()
+                    elif isinstance(close_df, pd.DataFrame) and len(codes) == 1:
+                        series = close_df.iloc[:, 0].dropna()
+                    else:
+                        results.append(dict(default))
+                        continue
+
+                    if len(series) < 8:
+                        results.append(dict(default))
+                        continue
+
+                    hist_df = pd.DataFrame({"close": series.values}, index=series.index)
+                    ma_score, arrangement, position = SmartScreener._score_ma_position(hist_df)
+                    ded_score, direction = SmartScreener._score_deduction(hist_df)
+
+                    results.append({
+                        "ma_score": float(ma_score),
+                        "ma_arrangement": arrangement,
+                        "ma_position": position,
+                        "deduction_score": float(ded_score),
+                        "deduction_direction": direction,
+                    })
+                except Exception:
+                    results.append(dict(default))
+        except Exception as exc:
+            logger.warning("MA/Deduction batch calculation failed: %s", exc)
+            results = [dict(default) for _ in codes]
+
+        while len(results) < len(codes):
+            results.append(dict(default))
+
+        return results
+
     def scan_to_dataframe(self, dt: date | None = None) -> pd.DataFrame:
         """掃描並回傳 DataFrame 格式（供 UI 使用）。"""
         hits = self.scan(dt)
@@ -250,6 +414,36 @@ class SmartScreener:
         top_codes = df["代碼"].head(200).tolist()
         top_otc = otc_flags[:200]
         df["RSI"] = self._batch_rsi(top_codes, otc_flags=top_otc)
+
+        # 批次計算均線位置 + 扣抵值（前 200 筆）
+        ma_results = self._batch_ma_deduction(top_codes, otc_flags=top_otc)
+        ma_scores = []
+        ded_scores = []
+        arrangements = []
+        positions = []
+        directions = []
+        for i in range(len(df)):
+            if i < len(ma_results):
+                r = ma_results[i]
+            else:
+                r = {
+                    "ma_score": 0.0, "ma_arrangement": "—", "ma_position": "—",
+                    "deduction_score": 0.0, "deduction_direction": "—",
+                }
+            ma_scores.append(r["ma_score"])
+            ded_scores.append(r["deduction_score"])
+            arrangements.append(r["ma_arrangement"])
+            positions.append(r["ma_position"])
+            directions.append(r["deduction_direction"])
+
+        df["均線分數"] = ma_scores
+        df["扣抵分數"] = ded_scores
+        df["均線排列"] = arrangements
+        df["MA位置"] = positions
+        df["扣抵方向"] = directions
+        # 將均線/扣抵分數加入選股分數（加分項）
+        df["選股分數"] = df["選股分數"] + df["均線分數"] + df["扣抵分數"]
+
         return df
 
     @staticmethod

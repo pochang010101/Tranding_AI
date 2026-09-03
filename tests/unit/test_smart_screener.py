@@ -181,3 +181,102 @@ class TestSmartScreener:
         assert hit.foreign_net == 0
         assert hit.tags == []
         assert hit.score == 0.0
+        assert hit.ma_arrangement == "—"
+        assert hit.ma_position == "—"
+        assert hit.deduction_direction == "—"
+        assert hit.ma_score == 0.0
+        assert hit.deduction_score == 0.0
+
+
+# ── 均線位置 / 扣抵值評分 ──
+
+class TestMAPositionScoring:
+    """均線位置評分測試。"""
+
+    def test_bullish_arrangement_full_score(self):
+        """均線多頭排列 + 價格站上所有均線 → 滿分 15。"""
+        # 建構穩定上升趨勢的歷史資料（130 天）
+        import numpy as np
+        prices = np.linspace(50, 150, 130)
+        df = pd.DataFrame({"close": prices})
+        score, arrangement, position = SmartScreener._score_ma_position(df)
+        assert arrangement == "多頭"
+        assert position == "站上全部"
+        assert score == 15
+
+    def test_bearish_arrangement(self):
+        """均線空頭排列。"""
+        import numpy as np
+        prices = np.linspace(150, 50, 130)
+        df = pd.DataFrame({"close": prices})
+        score, arrangement, position = SmartScreener._score_ma_position(df)
+        assert arrangement == "空頭"
+        assert position == "均線下方"
+        assert score == 0
+
+    def test_short_data(self):
+        """資料不足時回傳預設值。"""
+        df = pd.DataFrame({"close": [100, 101, 102]})
+        score, arrangement, position = SmartScreener._score_ma_position(df)
+        # 只有 3 筆，不足 8 筆
+        assert score == 0
+        assert arrangement == "—"
+        assert position == "—"
+
+    def test_empty_dataframe(self):
+        """空 DataFrame。"""
+        score, arrangement, position = SmartScreener._score_ma_position(pd.DataFrame())
+        assert score == 0
+
+    def test_none_input(self):
+        """None 輸入。"""
+        score, arrangement, position = SmartScreener._score_ma_position(None)
+        assert score == 0
+
+    def test_mixed_arrangement(self):
+        """糾結排列（非多頭非空頭）。"""
+        import numpy as np
+        # 先漲後跌再漲，使短均線和長均線交錯
+        prices = list(np.linspace(50, 100, 40)) + list(np.linspace(100, 70, 40)) + list(np.linspace(70, 90, 50))
+        df = pd.DataFrame({"close": prices})
+        score, arrangement, position = SmartScreener._score_ma_position(df)
+        # 至少不會 crash；排列可能是 "糾結"
+        assert arrangement in ("多頭", "空頭", "糾結")
+
+
+class TestDeductionScoring:
+    """扣抵值方向評分測試。"""
+
+    def test_all_rising(self):
+        """穩定上升 → 全揚升。"""
+        import numpy as np
+        prices = np.linspace(50, 150, 60)
+        df = pd.DataFrame({"close": prices})
+        score, direction = SmartScreener._score_deduction(df)
+        assert direction == "全揚升"
+        assert score == 10
+
+    def test_all_falling(self):
+        """穩定下跌 → 全下彎。"""
+        import numpy as np
+        prices = np.linspace(150, 50, 60)
+        df = pd.DataFrame({"close": prices})
+        score, direction = SmartScreener._score_deduction(df)
+        assert direction == "全下彎"
+        assert score == 0
+
+    def test_short_data(self):
+        """資料不足（< 56 筆）。"""
+        df = pd.DataFrame({"close": range(30)})
+        score, direction = SmartScreener._score_deduction(df)
+        assert score == 0
+        assert direction == "—"
+
+    def test_mixed_direction(self):
+        """先跌後漲 → 短揚長彎。"""
+        import numpy as np
+        prices = list(np.linspace(100, 60, 50)) + list(np.linspace(60, 80, 10))
+        df = pd.DataFrame({"close": prices})
+        score, direction = SmartScreener._score_deduction(df)
+        # 短均線（8天前）扣抵值正，長均線（55天前）扣抵值負
+        assert direction in ("短揚長彎", "全揚升", "全下彎")

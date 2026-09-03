@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -12,6 +13,37 @@ from atlas.presentation.components.charts import bar_chart
 from atlas.presentation.components.theme import get_colors, metric_card
 
 logger = logging.getLogger(__name__)
+
+# ── 觀察股持久化 ──────────────────────────────
+_SETTINGS_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "settings.local.json")
+
+
+def _persist_watchlist(codes: list[str]) -> None:
+    """將觀察股清單寫入 settings.local.json 作為持久化備份。"""
+    try:
+        import json
+        data: dict = {}
+        if os.path.exists(_SETTINGS_PATH):
+            with open(_SETTINGS_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+        data["watchlist_codes"] = codes
+        with open(_SETTINGS_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        logger.warning("持久化觀察股失敗：%s", exc)
+
+
+def _load_persisted_watchlist() -> list[str]:
+    """從 settings.local.json 讀取觀察股清單。"""
+    try:
+        import json
+        if os.path.exists(_SETTINGS_PATH):
+            with open(_SETTINGS_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+            return data.get("watchlist_codes", [])
+    except Exception as exc:
+        logger.warning("讀取持久化觀察股失敗：%s", exc)
+    return []
 
 
 def _run_smart_scan() -> tuple[pd.DataFrame, str]:
@@ -47,7 +79,10 @@ def render() -> None:
     <span class="legend-good">熱門題材</span> 屬於當日漲幅領先的概念股 |
     <span class="legend-good">多題材交集</span> 同時屬於2個以上熱門題材<br>
     <strong>選股分數</strong>：分數越高表示多個正面訊號同時出現，<span class="legend-good">≥50 強烈推薦</span>、<span class="legend-warn">30~50 值得關注</span>、<span class="legend-bad">&lt;30 單一訊號</span><br>
-    <strong>RSI(14)</strong>：相對強弱指標，<span class="legend-bad">&gt;70 超買</span>、50 多空平衡、<span class="legend-good">&lt;30 超賣反彈機會</span>
+    <strong>RSI(14)</strong>：相對強弱指標，<span class="legend-bad">&gt;70 超買</span>、50 多空平衡、<span class="legend-good">&lt;30 超賣反彈機會</span><br>
+    <strong>均線排列</strong>：<span class="legend-good">多頭</span> MA8&gt;MA21&gt;MA55 | <span class="legend-bad">空頭</span> MA8&lt;MA21&lt;MA55 | 糾結 其他<br>
+    <strong>MA位置</strong>：<span class="legend-good">站上全部</span> 價格在MA8/21/55之上 | <span class="legend-warn">站上短均</span> 僅站上部分 | <span class="legend-bad">均線下方</span><br>
+    <strong>扣抵方向</strong>：<span class="legend-good">全揚升</span> MA8/21/55均將上彎 | <span class="legend-warn">短揚長彎</span> 短均揚長均彎 | <span class="legend-bad">全下彎</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -75,6 +110,15 @@ def render() -> None:
             sorted(THEME_MAP.keys()),
             default=[],
         )
+
+    # ── 均線 / 扣抵值篩選 ──
+    col6, col7, col8 = st.columns(3)
+    with col6:
+        filter_ma_bull = st.checkbox("僅顯示均線多頭排列", key="scr_ma_bull")
+    with col7:
+        filter_above_ma55 = st.checkbox("僅顯示站上 MA55", key="scr_above_ma55")
+    with col8:
+        filter_ded_bull = st.checkbox("僅顯示扣抵值偏多（MA21 將揚升）", key="scr_ded_bull")
 
     run_btn = st.button("🔍 執行全市場掃描", type="primary", width="stretch")
 
@@ -138,6 +182,14 @@ def render() -> None:
             lambda themes: any(t in str(themes) for t in theme_filter)
         )
         display_df = display_df[mask]
+
+    # ── 均線 / 扣抵值篩選 ──
+    if filter_ma_bull and "均線排列" in display_df.columns:
+        display_df = display_df[display_df["均線排列"] == "多頭"]
+    if filter_above_ma55 and "MA位置" in display_df.columns:
+        display_df = display_df[display_df["MA位置"].isin(["站上全部", "站上短均"])]
+    if filter_ded_bull and "扣抵方向" in display_df.columns:
+        display_df = display_df[display_df["扣抵方向"].isin(["全揚升", "短揚長彎"])]
 
     if display_df.empty:
         st.warning("沒有符合所選條件的結果。")
@@ -208,6 +260,7 @@ def render() -> None:
         if existing_watchlist:
             if st.button("🗑 清空觀察股", width="stretch"):
                 st.session_state["watchlist_codes"] = []
+                _persist_watchlist([])
                 st.rerun()
     with col_w4:
         if existing_watchlist:
@@ -227,14 +280,19 @@ def render() -> None:
         height=min(600, 40 + len(show_df) * 35),
         column_config={
             "觀察": st.column_config.CheckboxColumn("觀察", default=False, width="small"),
-            "選股分數": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
+            "選股分數": st.column_config.ProgressColumn(min_value=0, max_value=130, format="%.0f"),
             "RSI": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
+            "均線分數": st.column_config.ProgressColumn(min_value=0, max_value=15, format="%.0f"),
+            "扣抵分數": st.column_config.ProgressColumn(min_value=0, max_value=10, format="%.0f"),
             "漲跌%": st.column_config.NumberColumn(format="%+.2f%%"),
             "收盤": st.column_config.NumberColumn(format="$%.2f"),
             "成交量(張)": st.column_config.NumberColumn(format="%d"),
             "外資(張)": st.column_config.NumberColumn(format="%+d"),
             "投信(張)": st.column_config.NumberColumn(format="%+d"),
             "法人合計(張)": st.column_config.NumberColumn(format="%+d"),
+            "均線排列": st.column_config.TextColumn("均線排列", width="small"),
+            "MA位置": st.column_config.TextColumn("MA位置", width="small"),
+            "扣抵方向": st.column_config.TextColumn("扣抵方向", width="small"),
         },
         disabled=[c for c in show_df.columns if c != "觀察"],
         key="screener_editor",
@@ -246,8 +304,12 @@ def render() -> None:
         n_existing = len(existing_watchlist)
         merged = list(dict.fromkeys(existing_watchlist + all_codes))
         st.session_state["watchlist_codes"] = merged
+        _persist_watchlist(merged)
         added = len(merged) - n_existing
         st.success(f"已全選加入 {added} 檔觀察股（去重後共 {len(merged)} 檔），可至 P-03 盤中雷達載入。")
+        if st.button("前往盤中雷達 →", key="goto_radar_all"):
+            st.session_state["page"] = "radar"
+            st.rerun()
 
     # 處理勾選加入觀察股
     if add_watchlist_btn:
@@ -259,8 +321,12 @@ def render() -> None:
             n_existing = len(existing_watchlist)
             merged = list(dict.fromkeys(existing_watchlist + new_codes))
             st.session_state["watchlist_codes"] = merged
+            _persist_watchlist(merged)
             added = len(merged) - n_existing
             st.success(f"已加入 {added} 檔觀察股（去重後共 {len(merged)} 檔），可至 P-03 盤中雷達載入。")
+            if st.button("前往盤中雷達 →", key="goto_radar_sel"):
+                st.session_state["page"] = "radar"
+                st.rerun()
 
     # ── 圖表區 ──
     st.divider()
