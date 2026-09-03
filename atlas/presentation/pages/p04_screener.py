@@ -215,8 +215,11 @@ def render() -> None:
 
     show_df = display_df.head(top_n).copy()
 
+    # 全選 checkbox
+    select_all = st.checkbox("全選", key="screener_select_all")
+
     # 加入勾選欄供用戶選擇觀察股
-    show_df.insert(0, "觀察", False)
+    show_df.insert(0, "觀察", select_all)
 
     edited_df = st.data_editor(
         show_df,
