@@ -88,6 +88,218 @@ def _verdict_color(verdict: str) -> str:
     return mapping.get(verdict, "legend-warn")
 
 
+def _score_chip(row: pd.Series, flow: dict) -> tuple[int, str, list[str]]:
+    """計算單檔籌碼綜合分數，回傳 (分數, 建議, 訊號列表)。
+
+    分數 > 0 偏多，< 0 偏空，絕對值越大信號越強。
+    """
+    score = 0
+    signals: list[str] = []
+
+    sr_ratio = float(row.get("short_margin_ratio", 0))
+    margin_chg = int(row.get("margin_change", 0))
+    margin_bal = int(row.get("margin_balance", 0))
+    margin_chg_pct = float(row.get("margin_change_pct", 0))
+
+    # 券資比（軋空潛力）
+    if sr_ratio > 30:
+        score += 30
+        signals.append(f"券資比 {sr_ratio:.1f}%（軋空警戒）")
+    elif sr_ratio > 20:
+        score += 15
+        signals.append(f"券資比 {sr_ratio:.1f}%（偏高）")
+    elif sr_ratio < 3:
+        score -= 10
+        signals.append(f"券資比 {sr_ratio:.1f}%（極低）")
+
+    # 融資增減（散戶動向，反指標）
+    if margin_chg < -500:
+        score += 20
+        signals.append(f"融資大減 {margin_chg:+,} 張（籌碼洗清）")
+    elif margin_chg < -100:
+        score += 10
+        signals.append(f"融資減少 {margin_chg:+,} 張")
+    elif margin_chg > 1000:
+        score -= 20
+        signals.append(f"融資暴增 {margin_chg:+,} 張（散戶追高）")
+    elif margin_chg > 300:
+        score -= 10
+        signals.append(f"融資增加 {margin_chg:+,} 張")
+
+    # 法人買賣超
+    total_net = flow.get("total_net", 0)
+    foreign_net = flow.get("foreign_net", 0)
+    if total_net > 3000:
+        score += 25
+        signals.append(f"法人大買 {total_net:+,} 張")
+    elif total_net > 500:
+        score += 10
+        signals.append(f"法人買超 {total_net:+,} 張")
+    elif total_net < -3000:
+        score -= 25
+        signals.append(f"法人大賣 {total_net:+,} 張")
+    elif total_net < -500:
+        score -= 10
+        signals.append(f"法人賣超 {total_net:+,} 張")
+
+    # 外資特別加分
+    if foreign_net > 2000:
+        score += 10
+        signals.append(f"外資買超 {foreign_net:+,} 張")
+    elif foreign_net < -2000:
+        score -= 10
+        signals.append(f"外資賣超 {foreign_net:+,} 張")
+
+    # 判定建議
+    if score >= 25:
+        advice = "偏多"
+    elif score >= 10:
+        advice = "偏多觀察"
+    elif score <= -25:
+        advice = "偏空"
+    elif score <= -10:
+        advice = "偏空觀察"
+    else:
+        advice = "中性"
+
+    return score, advice, signals
+
+
+def _render_chip_recommendations(combined: pd.DataFrame, c: dict) -> None:
+    """渲染籌碼選股建議區塊。"""
+    from atlas.presentation.service_container import fetch_institutional_flow
+
+    # 取每檔股票的法人資料（只對有 code 欄位的處理）
+    if "code" not in combined.columns:
+        st.info("資料格式不支援籌碼選股。")
+        return
+
+    # 排除成交量太小的（融資餘額 < 100 張）
+    valid = combined[combined["margin_balance"] >= 100].copy()
+    if valid.empty:
+        st.info("無符合條件的股票。")
+        return
+
+    results = []
+    # 批次取法人資料（用前 50 檔有意義的）
+    candidates = valid.nlargest(50, "margin_balance")
+
+    progress = st.progress(0, text="正在分析籌碼...")
+    for i, (_, row) in enumerate(candidates.iterrows()):
+        code = str(row["code"]).strip()
+        if not code:
+            continue
+        try:
+            flow = fetch_institutional_flow(code, days=1)
+        except Exception:
+            flow = {"foreign_net": 0, "trust_net": 0, "dealer_net": 0, "total_net": 0}
+
+        score, advice, signals = _score_chip(row, flow)
+        results.append({
+            "代碼": code,
+            "名稱": str(row.get("name", "")),
+            "籌碼分數": score,
+            "建議": advice,
+            "券資比%": round(float(row.get("short_margin_ratio", 0)), 2),
+            "融資增減": int(row.get("margin_change", 0)),
+            "法人合計": flow.get("total_net", 0),
+            "外資": flow.get("foreign_net", 0),
+            "投信": flow.get("trust_net", 0),
+            "訊號": " | ".join(signals),
+        })
+        progress.progress((i + 1) / len(candidates), text=f"分析中 {i+1}/{len(candidates)}...")
+
+    progress.empty()
+
+    if not results:
+        st.info("無分析結果。")
+        return
+
+    result_df = pd.DataFrame(results).sort_values("籌碼分數", ascending=False)
+
+    # 偏多 Top 10
+    bullish = result_df[result_df["籌碼分數"] > 0].head(10)
+    bearish = result_df[result_df["籌碼分數"] < 0].head(10)
+
+    col_bull, col_bear = st.columns(2)
+
+    with col_bull:
+        with st.container(border=True):
+            st.markdown(
+                f"#### <span style='color:{c.get('positive', 'green')}'>偏多建議 "
+                f"Top {len(bullish)}</span>",
+                unsafe_allow_html=True,
+            )
+            if bullish.empty:
+                st.info("目前無偏多訊號股票")
+            else:
+                st.dataframe(
+                    bullish[["代碼", "名稱", "籌碼分數", "建議", "券資比%",
+                             "融資增減", "法人合計", "外資"]],
+                    hide_index=True, width="stretch",
+                    column_config={
+                        "籌碼分數": st.column_config.ProgressColumn(
+                            min_value=-80, max_value=80, format="%d",
+                        ),
+                    },
+                )
+                st.caption("偏多邏輯：券資比高(軋空) + 融資減少(洗清) + 法人買超")
+
+    with col_bear:
+        with st.container(border=True):
+            st.markdown(
+                f"#### <span style='color:{c.get('negative', 'red')}'>偏空警示 "
+                f"Top {len(bearish)}</span>",
+                unsafe_allow_html=True,
+            )
+            if bearish.empty:
+                st.info("目前無偏空訊號股票")
+            else:
+                bear_show = bearish.sort_values("籌碼分數").head(10)
+                st.dataframe(
+                    bear_show[["代碼", "名稱", "籌碼分數", "建議", "券資比%",
+                               "融資增減", "法人合計", "外資"]],
+                    hide_index=True, width="stretch",
+                    column_config={
+                        "籌碼分數": st.column_config.ProgressColumn(
+                            min_value=-80, max_value=80, format="%d",
+                        ),
+                    },
+                )
+                st.caption("偏空邏輯：融資暴增(散戶追高) + 券資比低 + 法人賣超")
+
+    # 詳細訊號展開
+    with st.expander("展開完整訊號明細（全部 50 檔）"):
+        st.dataframe(
+            result_df[["代碼", "名稱", "籌碼分數", "建議", "訊號"]],
+            hide_index=True, width="stretch", height=500,
+        )
+
+    # 加入觀察股按鈕
+    st.divider()
+    col_add1, col_add2, col_add3 = st.columns(3)
+    with col_add1:
+        if not bullish.empty:
+            if st.button("將偏多股加入觀察股", type="primary", width="stretch"):
+                codes = bullish["代碼"].tolist()
+                existing = st.session_state.get("watchlist_codes", [])
+                merged = list(dict.fromkeys(existing + codes))
+                st.session_state["watchlist_codes"] = merged
+                st.success(f"已加入 {len(codes)} 檔偏多股至觀察股")
+    with col_add2:
+        if not bearish.empty:
+            if st.button("將偏空股加入觀察股", width="stretch"):
+                codes = bearish.sort_values("籌碼分數").head(10)["代碼"].tolist()
+                existing = st.session_state.get("watchlist_codes", [])
+                merged = list(dict.fromkeys(existing + codes))
+                st.session_state["watchlist_codes"] = merged
+                st.success(f"已加入 {len(codes)} 檔偏空股至觀察股")
+    with col_add3:
+        if st.button("前往盤中雷達 →", width="stretch"):
+            st.session_state["page"] = "radar"
+            st.rerun()
+
+
 def render() -> None:
     st.title("💰 籌碼分析")
 
@@ -310,3 +522,26 @@ def render() -> None:
         except Exception as exc:
             logger.warning("借券資料載入失敗: %s", exc)
             st.warning(f"借券資料載入失敗：{exc}")
+
+    # ══════════════════════════════════════════════════
+    # 籌碼選股建議（真實資料 Top 10-20）
+    # ══════════════════════════════════════════════════
+    if not combined.empty:
+        st.divider()
+        st.subheader("📋 籌碼選股建議")
+        st.markdown("""
+<div class="legend-box">
+<strong>選股邏輯說明</strong><br>
+<span class="legend-good">偏多建議</span>：券資比 &gt;20% (軋空潛力) + 融資減少 (散戶出場)
++ 法人買超 → 籌碼集中，偏多操作<br>
+<span class="legend-bad">偏空建議</span>：融資暴增 (散戶追高) + 券資比 &lt;5%
++ 法人賣超 → 籌碼凌亂，偏空觀望<br>
+<span class="legend-warn">中性</span>：籌碼無明顯方向
+</div>
+""", unsafe_allow_html=True)
+
+        try:
+            _render_chip_recommendations(combined, c)
+        except Exception as e:
+            logger.warning("籌碼選股建議載入失敗: %s", e)
+            st.warning(f"籌碼選股建議載入失敗：{e}")
