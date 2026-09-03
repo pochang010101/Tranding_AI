@@ -68,10 +68,18 @@ def render() -> None:
             try:
                 q = fetch_stock_quote(ticker)
                 price = q["price"]
+                prev = q.get("prev_close", 0)
+                pts = price - prev if prev else 0
                 chg = _pct_change(q)
+                status = (
+                    "positive" if chg > 0
+                    else "negative" if chg < 0
+                    else "neutral"
+                )
                 st.markdown(metric_card(
-                    name, f"{price:,.0f}", f"{chg:+.2f}%",
-                    "positive" if chg > 0 else "negative" if chg < 0 else "neutral",
+                    name, f"{price:,.2f}",
+                    delta=f"{pts:+,.2f} 點（{chg:+.2f}%）",
+                    status=status,
                 ), unsafe_allow_html=True)
             except Exception:
                 st.markdown(metric_card(name, "—", status="neutral"),
@@ -85,10 +93,19 @@ def render() -> None:
             if twf and twf.get("close"):
                 twf_close = twf["close"]
                 twf_change = twf["change"]
-                twf_pct = twf_change / (twf_close - twf_change) * 100 if (twf_close - twf_change) else 0
+                twf_prev = twf_close - twf_change
+                twf_pct = (
+                    twf_change / twf_prev * 100 if twf_prev else 0
+                )
+                status = (
+                    "positive" if twf_change > 0
+                    else "negative" if twf_change < 0
+                    else "neutral"
+                )
                 st.markdown(metric_card(
-                    "台指期夜盤", f"{twf_close:,.0f}", f"{twf_pct:+.2f}%",
-                    "positive" if twf_change > 0 else "negative" if twf_change < 0 else "neutral",
+                    "台指期夜盤", f"{twf_close:,.0f}",
+                    delta=f"{twf_change:+,.0f} 點（{twf_pct:+.2f}%）",
+                    status=status,
                 ), unsafe_allow_html=True)
             else:
                 st.markdown(metric_card("台指期夜盤", "—", status="neutral"),
