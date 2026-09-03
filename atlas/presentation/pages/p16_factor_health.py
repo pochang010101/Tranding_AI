@@ -195,11 +195,10 @@ def _render_factor_library() -> None:
                 factors = _lib.get_by_category(cat)
                 cols = st.columns(3)
                 for i, f in enumerate(factors):
-                    with cols[i % 3]:
-                        with st.container(border=True):
-                            d_icon = "📈" if f.direction == 1 else "📉"
-                            st.markdown(f"**{d_icon} {f.display_name}**")
-                            st.caption(f.description)
+                    with cols[i % 3], st.container(border=True):
+                        d_icon = "📈" if f.direction == 1 else "📉"
+                        st.markdown(f"**{d_icon} {f.display_name}**")
+                        st.caption(f.description)
             return
         except Exception as e:
             logger.warning("FactorStrategyLibrary 載入失敗，使用內建定義: %s", e)
@@ -223,18 +222,17 @@ def _render_factor_library() -> None:
         )
         cols = st.columns(3)
         for i, f in enumerate(cat_data["factors"]):
-            with cols[i % 3]:
-                with st.container(border=True):
-                    d_icon = "📈" if f["direction"] == 1 else "📉"
-                    st.markdown(f"**{d_icon} {f['display']}**")
-                    st.markdown(
-                        f'<span style="background:{cat_color}22; '
-                        f'color:{cat_color}; padding:2px 8px; '
-                        f'border-radius:4px; font-size:12px;">'
-                        f'{cat_name}</span>',
-                        unsafe_allow_html=True,
-                    )
-                    st.caption(f["desc"])
+            with cols[i % 3], st.container(border=True):
+                d_icon = "📈" if f["direction"] == 1 else "📉"
+                st.markdown(f"**{d_icon} {f['display']}**")
+                st.markdown(
+                    f'<span style="background:{cat_color}22; '
+                    f'color:{cat_color}; padding:2px 8px; '
+                    f'border-radius:4px; font-size:12px;">'
+                    f'{cat_name}</span>',
+                    unsafe_allow_html=True,
+                )
+                st.caption(f["desc"])
 
 
 # ── Tab 2: 因子 ICIR 排名 ─────────────────────────
@@ -390,7 +388,7 @@ def _render_multi_factor() -> None:
 
     with col_left:
         st.subheader("策略清單")
-        strategy_names = [s["name"] for s in _MULTI_FACTOR_STRATEGIES]
+        [s["name"] for s in _MULTI_FACTOR_STRATEGIES]
         selected_idx = 0
         for i, s in enumerate(_MULTI_FACTOR_STRATEGIES):
             if st.button(
@@ -603,48 +601,46 @@ def _render_strategy_health() -> None:
     # 健康度柱狀圖 + 勝率柱狀圖
     col_a, col_b = st.columns(2)
 
-    with col_a:
-        with st.container(border=True):
-            scores = [s.score for s in report.strategies]
-            names = [s.name for s in report.strategies]
-            fig = go.Figure(go.Bar(
-                x=names, y=scores,
-                marker_color=[
-                    c["positive"] if s >= 60
-                    else c["warning"] if s >= 40
-                    else c["negative"]
-                    for s in scores
-                ],
-                text=[f"{s:.0f}" for s in scores],
-                textposition="outside",
-            ))
-            fig = _apply_layout(fig, "策略健康分", 320)
-            fig.add_hline(
-                y=60, line_dash="dash", line_color="#4caf50",
-                annotation_text="健康閾值",
-            )
-            st.plotly_chart(fig, use_container_width=True)
+    with col_a, st.container(border=True):
+        scores = [s.score for s in report.strategies]
+        names = [s.name for s in report.strategies]
+        fig = go.Figure(go.Bar(
+            x=names, y=scores,
+            marker_color=[
+                c["positive"] if s >= 60
+                else c["warning"] if s >= 40
+                else c["negative"]
+                for s in scores
+            ],
+            text=[f"{s:.0f}" for s in scores],
+            textposition="outside",
+        ))
+        fig = _apply_layout(fig, "策略健康分", 320)
+        fig.add_hline(
+            y=60, line_dash="dash", line_color="#4caf50",
+            annotation_text="健康閾值",
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-    with col_b:
-        with st.container(border=True):
-            win_rates = [s.win_rate * 100 for s in report.strategies]
-            fig2 = go.Figure(go.Bar(
-                x=names, y=win_rates,
-                marker_color=[
-                    c["positive"] if w >= 50
-                    else c["warning"] if w >= 40
-                    else c["negative"]
-                    for w in win_rates
-                ],
-                text=[f"{w:.0f}%" for w in win_rates],
-                textposition="outside",
-            ))
-            fig2 = _apply_layout(fig2, "策略勝率", 320)
-            fig2.add_hline(
-                y=50, line_dash="dash", line_color="#4caf50",
-                annotation_text="50% 基準線",
-            )
-            st.plotly_chart(fig2, use_container_width=True)
+    with col_b, st.container(border=True):
+        win_rates = [s.win_rate * 100 for s in report.strategies]
+        fig2 = go.Figure(go.Bar(
+            x=names, y=win_rates,
+            marker_color=[
+                c["positive"] if w >= 50
+                else c["warning"] if w >= 40
+                else c["negative"]
+                for w in win_rates
+            ],
+            text=[f"{w:.0f}%" for w in win_rates],
+            textposition="outside",
+        ))
+        fig2 = _apply_layout(fig2, "策略勝率", 320)
+        fig2.add_hline(
+            y=50, line_dash="dash", line_color="#4caf50",
+            annotation_text="50% 基準線",
+        )
+        st.plotly_chart(fig2, use_container_width=True)
 
     # 行動建議
     if report.action_items:

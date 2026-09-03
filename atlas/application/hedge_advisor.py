@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date
 from typing import Any
 
 import pandas as pd
@@ -271,7 +270,7 @@ class HedgeAdvisor:
         """取得個股現價（TWSE/TPEx → yfinance fallback）。"""
         # 優先從 TWSE/TPEx 全市場行情取收盤價（快取，不需網路）
         try:
-            from atlas.infrastructure.twse_bulk import fetch_twse_daily_all, fetch_tpex_daily_all
+            from atlas.infrastructure.twse_bulk import fetch_tpex_daily_all, fetch_twse_daily_all
             for fetch_fn in [fetch_twse_daily_all, fetch_tpex_daily_all]:
                 df = fetch_fn()
                 if not df.empty and "code" in df.columns and "close" in df.columns:
@@ -286,6 +285,7 @@ class HedgeAdvisor:
         # Fallback: yfinance
         try:
             import yfinance as yf
+
             from atlas.constants import is_otc
             ticker = f"{code}.TWO" if is_otc(code) else f"{code}.TW"
             data = yf.download(ticker, period="5d", progress=False, auto_adjust=True)
@@ -326,7 +326,10 @@ class HedgeAdvisor:
     def _fetch_margin(self, code: str) -> tuple[int, int, int, float]:
         """取得融資融券資料，回傳 (margin_balance, margin_change, short_balance, short_margin_ratio)。"""
         try:
-            from atlas.infrastructure.margin_data import fetch_twse_margin_all, fetch_tpex_margin_all
+            from atlas.infrastructure.margin_data import (
+                fetch_tpex_margin_all,
+                fetch_twse_margin_all,
+            )
 
             twse = fetch_twse_margin_all()
             tpex = fetch_tpex_margin_all()

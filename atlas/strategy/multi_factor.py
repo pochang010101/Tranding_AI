@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -291,7 +290,7 @@ class MultiFactorEngine:
         Returns:
             回測統計 dict。
         """
-        preset = self.get_preset(preset_name)
+        self.get_preset(preset_name)
 
         # 按時間排序取前 periods 期
         sorted_dates = sorted(factor_history.keys())[:periods]

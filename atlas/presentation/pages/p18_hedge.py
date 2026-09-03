@@ -67,7 +67,7 @@ def render() -> None:
 </div>
 """, unsafe_allow_html=True)
 
-    c = get_colors()
+    get_colors()
 
     # ══════════════════════════════════════════
     # 區塊 1：大盤期貨儀表板
@@ -182,7 +182,7 @@ def render() -> None:
         try:
             with st.spinner(f"分析 {code} 對沖策略..."):
 
-                from atlas.application.hedge_advisor import HedgeAdvisor, HedgeAdvice
+                from atlas.application.hedge_advisor import HedgeAdvice, HedgeAdvisor
 
                 advisor = HedgeAdvisor()
                 adv: HedgeAdvice = advisor.analyze_stock(code, hold_lots)

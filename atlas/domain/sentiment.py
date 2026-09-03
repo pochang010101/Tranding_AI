@@ -228,12 +228,12 @@ class SentimentService(ISentimentService):
         - 使用率 < 15% → 20 分（極度冷清/恐慌後）
         """
         try:
+            import pandas as pd
+
             from atlas.infrastructure.margin_data import (
                 fetch_tpex_margin_all,
                 fetch_twse_margin_all,
             )
-
-            import pandas as pd
 
             twse = fetch_twse_margin_all()
             tpex = fetch_tpex_margin_all()

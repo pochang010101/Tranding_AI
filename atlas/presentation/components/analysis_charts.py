@@ -9,7 +9,6 @@ from plotly.subplots import make_subplots
 
 from atlas.presentation.components.theme import get_colors
 
-
 # ── 共用工具 ────────────────────────────────────────
 
 def _score_color(value: int | float) -> str:

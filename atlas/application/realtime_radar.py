@@ -477,8 +477,11 @@ def scan_watchlist_sync(
             # --- 融資融券偵測器資料 ---
             margin_info = None
             try:
-                from atlas.infrastructure.margin_data import fetch_tpex_margin_all, fetch_twse_margin_all
                 from atlas.constants import is_otc
+                from atlas.infrastructure.margin_data import (
+                    fetch_tpex_margin_all,
+                    fetch_twse_margin_all,
+                )
                 margin_df = fetch_tpex_margin_all() if is_otc(code) else fetch_twse_margin_all()
                 if not margin_df.empty:
                     match = margin_df[margin_df["code"] == code]
@@ -602,18 +605,17 @@ def scan_watchlist_sync(
                 m_sell = _safe_int(margin_info.get("margin_sell", 0))
                 m_bal = _safe_int(margin_info.get("margin_balance", 0))
                 m_change = m_buy - m_sell
-                if m_bal > 0 and abs(m_change) > m_bal * 0.05:
-                    if m_change > 0:
-                        sig_dir = "ALERT" if close >= prev_close else "SELL"
-                        label = "散戶追高" if close >= prev_close else "散戶攤平"
-                        sev = 2 if m_change > m_bal * 0.1 else 1
-                        results.append({
-                            "time": now_str, "detector": "融資暴增", "code": code,
-                            "name": code_name_map.get(code, ""),
-                            "direction": sig_dir,
-                            "price": close, "severity": sev,
-                            "detail": f"融資增加 {m_change} 張（餘額 {m_bal} 張），{label}警戒",
-                        })
+                if m_bal > 0 and abs(m_change) > m_bal * 0.05 and m_change > 0:
+                    sig_dir = "ALERT" if close >= prev_close else "SELL"
+                    label = "散戶追高" if close >= prev_close else "散戶攤平"
+                    sev = 2 if m_change > m_bal * 0.1 else 1
+                    results.append({
+                        "time": now_str, "detector": "融資暴增", "code": code,
+                        "name": code_name_map.get(code, ""),
+                        "direction": sig_dir,
+                        "price": close, "severity": sev,
+                        "detail": f"融資增加 {m_change} 張（餘額 {m_bal} 張），{label}警戒",
+                    })
 
             # --- 斷頭警戒 ---
             if margin_info:

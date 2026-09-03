@@ -64,7 +64,7 @@ def _build_combined(twse: pd.DataFrame, tpex: pd.DataFrame) -> pd.DataFrame:
         axis=1,
     )
     # 融資增幅 %
-    prev_balance = combined["margin_balance"] - combined["margin_change"]
+    combined["margin_balance"] - combined["margin_change"]
     combined["margin_change_pct"] = combined.apply(
         lambda r: (
             r["margin_change"] / (r["margin_balance"] - r["margin_change"]) * 100
@@ -98,8 +98,8 @@ def _score_chip(row: pd.Series, flow: dict) -> tuple[int, str, list[str]]:
 
     sr_ratio = float(row.get("short_margin_ratio", 0))
     margin_chg = int(row.get("margin_change", 0))
-    margin_bal = int(row.get("margin_balance", 0))
-    margin_chg_pct = float(row.get("margin_change_pct", 0))
+    int(row.get("margin_balance", 0))
+    float(row.get("margin_change_pct", 0))
 
     # 券資比（軋空潛力）
     if sr_ratio > 30:
@@ -223,50 +223,48 @@ def _render_chip_recommendations(combined: pd.DataFrame, c: dict) -> None:
 
     col_bull, col_bear = st.columns(2)
 
-    with col_bull:
-        with st.container(border=True):
-            st.markdown(
-                f"#### <span style='color:{c.get('positive', 'green')}'>偏多建議 "
-                f"Top {len(bullish)}</span>",
-                unsafe_allow_html=True,
+    with col_bull, st.container(border=True):
+        st.markdown(
+            f"#### <span style='color:{c.get('positive', 'green')}'>偏多建議 "
+            f"Top {len(bullish)}</span>",
+            unsafe_allow_html=True,
+        )
+        if bullish.empty:
+            st.info("目前無偏多訊號股票")
+        else:
+            st.dataframe(
+                bullish[["代碼", "名稱", "籌碼分數", "建議", "券資比%",
+                         "融資增減", "法人合計", "外資"]],
+                hide_index=True, width="stretch",
+                column_config={
+                    "籌碼分數": st.column_config.ProgressColumn(
+                        min_value=-80, max_value=80, format="%d",
+                    ),
+                },
             )
-            if bullish.empty:
-                st.info("目前無偏多訊號股票")
-            else:
-                st.dataframe(
-                    bullish[["代碼", "名稱", "籌碼分數", "建議", "券資比%",
-                             "融資增減", "法人合計", "外資"]],
-                    hide_index=True, width="stretch",
-                    column_config={
-                        "籌碼分數": st.column_config.ProgressColumn(
-                            min_value=-80, max_value=80, format="%d",
-                        ),
-                    },
-                )
-                st.caption("偏多邏輯：券資比高(軋空) + 融資減少(洗清) + 法人買超")
+            st.caption("偏多邏輯：券資比高(軋空) + 融資減少(洗清) + 法人買超")
 
-    with col_bear:
-        with st.container(border=True):
-            st.markdown(
-                f"#### <span style='color:{c.get('negative', 'red')}'>偏空警示 "
-                f"Top {len(bearish)}</span>",
-                unsafe_allow_html=True,
+    with col_bear, st.container(border=True):
+        st.markdown(
+            f"#### <span style='color:{c.get('negative', 'red')}'>偏空警示 "
+            f"Top {len(bearish)}</span>",
+            unsafe_allow_html=True,
+        )
+        if bearish.empty:
+            st.info("目前無偏空訊號股票")
+        else:
+            bear_show = bearish.sort_values("籌碼分數").head(10)
+            st.dataframe(
+                bear_show[["代碼", "名稱", "籌碼分數", "建議", "券資比%",
+                           "融資增減", "法人合計", "外資"]],
+                hide_index=True, width="stretch",
+                column_config={
+                    "籌碼分數": st.column_config.ProgressColumn(
+                        min_value=-80, max_value=80, format="%d",
+                    ),
+                },
             )
-            if bearish.empty:
-                st.info("目前無偏空訊號股票")
-            else:
-                bear_show = bearish.sort_values("籌碼分數").head(10)
-                st.dataframe(
-                    bear_show[["代碼", "名稱", "籌碼分數", "建議", "券資比%",
-                               "融資增減", "法人合計", "外資"]],
-                    hide_index=True, width="stretch",
-                    column_config={
-                        "籌碼分數": st.column_config.ProgressColumn(
-                            min_value=-80, max_value=80, format="%d",
-                        ),
-                    },
-                )
-                st.caption("偏空邏輯：融資暴增(散戶追高) + 券資比低 + 法人賣超")
+            st.caption("偏空邏輯：融資暴增(散戶追高) + 券資比低 + 法人賣超")
 
     # 詳細訊號展開
     with st.expander("展開完整訊號明細（全部 50 檔）"):
@@ -279,7 +277,7 @@ def _render_chip_recommendations(combined: pd.DataFrame, c: dict) -> None:
     st.divider()
     col_add1, col_add2, col_add3 = st.columns(3)
     with col_add1:
-        if not bullish.empty:
+        if not bullish.empty:  # noqa: SIM102
             if st.button("將偏多股加入觀察股", type="primary", width="stretch"):
                 codes = bullish["代碼"].tolist()
                 existing = st.session_state.get("watchlist_codes", [])
@@ -287,13 +285,12 @@ def _render_chip_recommendations(combined: pd.DataFrame, c: dict) -> None:
                 st.session_state["watchlist_codes"] = merged
                 st.success(f"已加入 {len(codes)} 檔偏多股至觀察股")
     with col_add2:
-        if not bearish.empty:
-            if st.button("將偏空股加入觀察股", width="stretch"):
-                codes = bearish.sort_values("籌碼分數").head(10)["代碼"].tolist()
-                existing = st.session_state.get("watchlist_codes", [])
-                merged = list(dict.fromkeys(existing + codes))
-                st.session_state["watchlist_codes"] = merged
-                st.success(f"已加入 {len(codes)} 檔偏空股至觀察股")
+        if not bearish.empty and st.button("將偏空股加入觀察股", width="stretch"):
+            codes = bearish.sort_values("籌碼分數").head(10)["代碼"].tolist()
+            existing = st.session_state.get("watchlist_codes", [])
+            merged = list(dict.fromkeys(existing + codes))
+            st.session_state["watchlist_codes"] = merged
+            st.success(f"已加入 {len(codes)} 檔偏空股至觀察股")
     with col_add3:
         if st.button("前往盤中雷達 →", width="stretch"):
             st.session_state["page"] = "radar"

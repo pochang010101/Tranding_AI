@@ -257,11 +257,10 @@ def render() -> None:
     with col_w2:
         add_all_btn = st.button("⭐ 全選加入觀察股", width="stretch")
     with col_w3:
-        if existing_watchlist:
-            if st.button("🗑 清空觀察股", width="stretch"):
-                st.session_state["watchlist_codes"] = []
-                _persist_watchlist([])
-                st.rerun()
+        if existing_watchlist and st.button("🗑 清空觀察股", width="stretch"):
+            st.session_state["watchlist_codes"] = []
+            _persist_watchlist([])
+            st.rerun()
     with col_w4:
         if existing_watchlist:
             st.info(f"觀察股 {len(existing_watchlist)} 檔：{', '.join(existing_watchlist[:10])}{'…' if len(existing_watchlist) > 10 else ''}")

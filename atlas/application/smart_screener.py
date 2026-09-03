@@ -347,7 +347,7 @@ class SmartScreener:
             else:
                 close_df = data
 
-            for i, code in enumerate(codes):
+            for i, _code in enumerate(codes):
                 ticker = tickers[i]
                 try:
                     if isinstance(close_df, pd.DataFrame) and ticker in close_df.columns:
