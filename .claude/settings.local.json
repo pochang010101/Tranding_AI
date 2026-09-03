@@ -109,7 +109,8 @@
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_multi_factor.py -x -q --tb=short 2>&1)",
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_factor_strategies.py -x -q --tb=short 2>&1)",
       "Bash(PYTHONPATH=. python -m pytest tests/unit/test_notification_hub.py tests/unit/test_notification_wiring.py -q --tb=short 2>&1)",
-      "Bash(PYTHONPATH=. python -m pytest tests/ -q --tb=no)"
+      "Bash(PYTHONPATH=. python -m pytest tests/ -q --tb=no)",
+      "Bash(PYTHONPATH=. python -m pytest tests/unit/test_us_market.py -x -q --tb=short)"
     ]
   }
 }
