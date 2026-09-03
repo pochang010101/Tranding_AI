@@ -30,7 +30,7 @@ services:
     ports:
       - "9090:9090"
     networks:
-      - atlas_network
+      - atlas-net
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
@@ -50,11 +50,12 @@ services:
       GF_INSTALL_PLUGINS: ""
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     ports:
       - "3000:3000"
     networks:
-      - atlas_network
+      - atlas-net
     depends_on:
       prometheus:
         condition: service_healthy
@@ -75,7 +76,7 @@ services:
     ports:
       - "9187:9187"
     networks:
-      - atlas_network
+      - atlas-net
     depends_on:
       - prometheus
 
@@ -89,7 +90,7 @@ services:
     ports:
       - "9121:9121"
     networks:
-      - atlas_network
+      - atlas-net
     depends_on:
       - prometheus
 
@@ -114,7 +115,7 @@ services:
     ports:
       - "9100:9100"
     networks:
-      - atlas_network
+      - atlas-net
     pid: host   # requires Linux; omit on Docker Desktop / WSL2 if it errors
 
 volumes:
@@ -124,5 +125,6 @@ volumes:
     driver: local
 
 networks:
-  atlas_network:
-    external: true   # must match the network name in docker-compose.yml
+  atlas-net:
+    external: true
+    name: tranding_ai_atlas-net

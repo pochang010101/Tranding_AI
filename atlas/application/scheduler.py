@@ -141,10 +141,10 @@ class Scheduler(ISchedulerService):
         """載入預設台股交易日排程（UTC+8 時間）。"""
         defaults = [
             # name, cron (M H * * DOW), workflow, enabled
-            ("tw_pre_market", "30 7 * * 1-5", "pre_market", False),
-            ("tw_intraday", "30 7 * * 1-5", "intraday", False),
-            ("tw_post_market", "30 17 * * 1-5", "post_market", False),
-            ("tw_monthly_rebuild", "0 20 * * 0", "monthly_rebuild", False),
+            ("tw_pre_market", "30 7 * * 1-5", "pre_market", True),
+            ("tw_intraday", "30 7 * * 1-5", "intraday", True),
+            ("tw_post_market", "30 17 * * 1-5", "post_market", True),
+            ("tw_monthly_rebuild", "0 20 * * 0", "monthly_rebuild", True),
             # 維運排程（非交易日亦執行）
             ("daily_backup", "0 14 * * *", "backup_db", False),
             ("weekly_retrain", "0 21 * * 0", "retrain_model", False),

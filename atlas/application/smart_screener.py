@@ -18,6 +18,9 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# 模組級快取：當天只抓一次 yfinance 歷史，key = "{code}_{today}"
+_MA_CACHE: dict[str, pd.DataFrame] = {}
+
 
 @dataclass
 class ScreenerHit:
@@ -316,68 +319,103 @@ class SmartScreener:
     def _batch_ma_deduction(
         codes: list[str], otc_flags: list[bool] | None = None
     ) -> list[dict]:
-        """批次計算均線位置 + 扣抵值，回傳每支股票的 dict。"""
+        """批次計算均線位置 + 扣抵值，回傳每支股票的 dict。
+
+        內建當日快取：同一支股票同一天只會呼叫 yfinance 一次。
+        """
         results: list[dict] = []
         default = {
             "ma_score": 0.0, "ma_arrangement": "—", "ma_position": "—",
             "deduction_score": 0.0, "deduction_direction": "—",
         }
 
-        try:
-            import yfinance as yf
+        today_str = date.today().isoformat()
 
-            if otc_flags is None:
-                otc_flags = [False] * len(codes)
-            tickers = [
-                f"{c}.TWO" if is_otc else f"{c}.TW"
-                for c, is_otc in zip(codes, otc_flags, strict=False)
-            ]
+        # 分離快取命中 vs 需要下載的股票
+        if otc_flags is None:
+            otc_flags = [False] * len(codes)
 
-            # 下載 180 天歷史（覆蓋 MA120 + 安全餘量）
-            data = yf.download(
-                tickers, period="180d", progress=False, threads=True, auto_adjust=True
-            )
+        cached_close: dict[str, pd.Series] = {}
+        miss_codes: list[str] = []
+        miss_tickers: list[str] = []
+        miss_indices: list[int] = []
 
-            if data.empty:
-                return [dict(default) for _ in codes]
-
-            close_key = "Close"
-            if isinstance(data.columns, pd.MultiIndex):
-                close_df = data[close_key] if close_key in data.columns.get_level_values(0) else data
+        for i, (code, is_otc) in enumerate(
+            zip(codes, otc_flags, strict=False)
+        ):
+            cache_key = f"{code}_{today_str}"
+            if cache_key in _MA_CACHE:
+                cached_close[code] = _MA_CACHE[cache_key]
             else:
-                close_df = data
+                ticker = f"{code}.TWO" if is_otc else f"{code}.TW"
+                miss_codes.append(code)
+                miss_tickers.append(ticker)
+                miss_indices.append(i)
 
-            for i, _code in enumerate(codes):
-                ticker = tickers[i]
-                try:
-                    if isinstance(close_df, pd.DataFrame) and ticker in close_df.columns:
-                        series = close_df[ticker].dropna()
-                    elif isinstance(close_df, pd.DataFrame) and len(codes) == 1:
-                        series = close_df.iloc[:, 0].dropna()
+        logger.info(
+            "MA cache: %d hit, %d miss (of %d)",
+            len(codes) - len(miss_codes), len(miss_codes), len(codes),
+        )
+
+        # 批次下載未命中的股票
+        downloaded: dict[str, pd.Series] = {}
+        if miss_tickers:
+            try:
+                import yfinance as yf
+
+                data = yf.download(
+                    miss_tickers, period="180d",
+                    progress=False, threads=True, auto_adjust=True,
+                )
+                if not data.empty:
+                    close_key = "Close"
+                    if isinstance(data.columns, pd.MultiIndex):
+                        close_df = (
+                            data[close_key]
+                            if close_key in data.columns.get_level_values(0)
+                            else data
+                        )
                     else:
-                        results.append(dict(default))
-                        continue
+                        close_df = data
 
-                    if len(series) < 8:
-                        results.append(dict(default))
-                        continue
+                    for j, code in enumerate(miss_codes):
+                        ticker = miss_tickers[j]
+                        try:
+                            if isinstance(close_df, pd.DataFrame) and ticker in close_df.columns:
+                                series = close_df[ticker].dropna()
+                            elif isinstance(close_df, pd.DataFrame) and len(miss_codes) == 1:
+                                series = close_df.iloc[:, 0].dropna()
+                            else:
+                                series = pd.Series(dtype=float)
 
-                    hist_df = pd.DataFrame({"close": series.values}, index=series.index)
-                    ma_score, arrangement, position = SmartScreener._score_ma_position(hist_df)
-                    ded_score, direction = SmartScreener._score_deduction(hist_df)
+                            downloaded[code] = series
+                            _MA_CACHE[f"{code}_{today_str}"] = series
+                        except Exception:
+                            downloaded[code] = pd.Series(dtype=float)
+            except Exception as exc:
+                logger.warning("MA/Deduction batch download failed: %s", exc)
 
-                    results.append({
-                        "ma_score": float(ma_score),
-                        "ma_arrangement": arrangement,
-                        "ma_position": position,
-                        "deduction_score": float(ded_score),
-                        "deduction_direction": direction,
-                    })
-                except Exception:
+        # 逐檔計算分數
+        for _i, code in enumerate(codes):
+            try:
+                series = cached_close.get(code) or downloaded.get(code)
+                if series is None or len(series) < 8:
                     results.append(dict(default))
-        except Exception as exc:
-            logger.warning("MA/Deduction batch calculation failed: %s", exc)
-            results = [dict(default) for _ in codes]
+                    continue
+
+                hist_df = pd.DataFrame({"close": series.values}, index=series.index)
+                ma_score, arrangement, position = SmartScreener._score_ma_position(hist_df)
+                ded_score, direction = SmartScreener._score_deduction(hist_df)
+
+                results.append({
+                    "ma_score": float(ma_score),
+                    "ma_arrangement": arrangement,
+                    "ma_position": position,
+                    "deduction_score": float(ded_score),
+                    "deduction_direction": direction,
+                })
+            except Exception:
+                results.append(dict(default))
 
         while len(results) < len(codes):
             results.append(dict(default))

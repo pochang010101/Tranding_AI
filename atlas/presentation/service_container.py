@@ -245,6 +245,36 @@ def get_ml_engine():
 
 
 @st.cache_resource
+def get_quote_adapter():
+    """建立 QuoteAdapter 單例（台股 fallback chain）。"""
+    try:
+        import asyncio
+
+        from atlas.config import QuoteSourceConfig
+        from atlas.enums import MarketType
+        from atlas.infrastructure.quote_adapter import QuoteAdapter
+
+        cache = get_cache_manager()
+        adapter = QuoteAdapter(config=QuoteSourceConfig(), cache=cache)
+        # connect() 是 async，需同步呼叫
+        try:
+            asyncio.get_running_loop()
+            # 在 async context 中不能用 asyncio.run，建立新 thread 執行
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(asyncio.run, adapter.connect(MarketType.TW)).result(timeout=15)
+        except RuntimeError:
+            # 無 running loop，直接用 asyncio.run
+            asyncio.run(adapter.connect(MarketType.TW))
+        logger.info("QuoteAdapter 初始化成功（TW fallback chain）")
+        return adapter
+    except Exception as e:
+        logger.warning("QuoteAdapter 初始化失敗：%s", e)
+        return None
+
+
+@st.cache_resource
 def get_realtime_service():
     """取得全域 RealtimePushService 單例（背景執行緒已啟動）。
 

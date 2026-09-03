@@ -70,3 +70,6 @@ warn_unused_configs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+markers = [
+    "e2e: End-to-end tests requiring real services (DB/Redis/network)",
+]
