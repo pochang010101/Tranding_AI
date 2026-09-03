@@ -8,6 +8,7 @@ import logging
 import pandas as pd
 import streamlit as st
 
+from atlas.constants_us import US_TOP_STOCKS
 from atlas.presentation.components.analysis_charts import (
     energy_bar,
     gauge_rings,
@@ -29,9 +30,19 @@ from atlas.presentation.service_container import (
 logger = logging.getLogger(__name__)
 
 
-def _select_stock() -> str:
-    """股票選擇器（熱門股下拉 + 自訂代碼）。"""
-    stock_labels = [f"{code} {name}" for code, name in TW_TOP_STOCKS]
+def _select_stock() -> tuple[str, str]:
+    """股票選擇器（熱門股下拉 + 自訂代碼），回傳 (code, market)。"""
+    market = st.session_state.get("market", "TW")
+
+    if market == "US":
+        stock_labels = [f"{t} {n}" for t, n, _ in US_TOP_STOCKS]
+        default_code = "AAPL"
+        placeholder = "e.g. AAPL"
+    else:
+        stock_labels = [f"{code} {name}" for code, name in TW_TOP_STOCKS]
+        default_code = "2330"
+        placeholder = "e.g. 2330"
+
     col_sel, col_custom = st.columns([3, 2])
     with col_sel:
         selected_label = st.selectbox(
@@ -41,7 +52,7 @@ def _select_stock() -> str:
     with col_custom:
         if selected_label == "（自訂代碼）":
             custom_code = st.text_input(
-                "自訂股票代碼", value="2330", placeholder="e.g. 2330",
+                "自訂股票代碼", value=default_code, placeholder=placeholder,
                 key="p19_custom_code",
             )
             code = custom_code.strip()
@@ -49,7 +60,7 @@ def _select_stock() -> str:
             code = selected_label.split()[0]
             st.text_input("股票代碼（唯讀）", value=code, disabled=True,
                           key="p19_code_ro")
-    return code
+    return code, market
 
 
 def _get_trend_label(df: pd.DataFrame) -> tuple[str, str]:
@@ -147,7 +158,8 @@ def render() -> None:  # noqa: C901
 
     c = get_colors()
     dark = _is_dark_theme()
-    code = _select_stock()
+    code, market = _select_stock()
+    is_tw = market == "TW"
 
     # ── 取得基礎資料 ───────────────────────────────
     with st.spinner(f"載入 {code} 資料中…"):
@@ -202,8 +214,9 @@ def render() -> None:  # noqa: C901
             )
         with r0[3]:
             vol = int(last.get("volume", 0))
+            vol_unit = "" if is_tw else " 股"
             st.markdown(
-                metric_card("成交量", f"{vol:,}"),
+                metric_card("成交量", f"{vol:,}{vol_unit}"),
                 unsafe_allow_html=True,
             )
         with r0[4]:
@@ -463,89 +476,97 @@ def render() -> None:  # noqa: C901
         except Exception as e:
             st.info(f"成本分布載入中… ({e})")
 
-    # ── 06 法人買賣超 ────────────────────────────
+    # ── 06 法人買賣超（台股專屬）────────────────────
     with r2c3, st.container(border=True):
-        st.markdown("#### 06 法人買賣超")
-        try:
-            flow = fetch_institutional_flow(code)
-            if flow and flow.get("source") != "unavailable":
-                fig = institutional_flow_chart(
-                    dates=[flow.get("date", "today")],
-                    foreign=[flow.get("foreign_net", 0)],
-                    trust=[flow.get("trust_net", 0)],
-                    dealer=[flow.get("dealer_net", 0)],
-                    total=[flow.get("total_net", 0)],
-                    height=380,
-                    dark=dark,
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("法人買賣超資料暫無法取得")
+        if is_tw:
+            st.markdown("#### 06 法人買賣超")
+            try:
+                flow = fetch_institutional_flow(code)
+                if flow and flow.get("source") != "unavailable":
+                    fig = institutional_flow_chart(
+                        dates=[flow.get("date", "today")],
+                        foreign=[flow.get("foreign_net", 0)],
+                        trust=[flow.get("trust_net", 0)],
+                        dealer=[flow.get("dealer_net", 0)],
+                        total=[flow.get("total_net", 0)],
+                        height=380,
+                        dark=dark,
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("法人買賣超資料暫無法取得")
 
-            # 法人摘要
-            st.markdown(
-                f"外資：**{flow.get('foreign_net', 0):+,}** 張 | "
-                f"投信：**{flow.get('trust_net', 0):+,}** 張 | "
-                f"自營：**{flow.get('dealer_net', 0):+,}** 張"
-            )
-        except Exception as e:
-            st.info(f"法人資料載入中… ({e})")
+                # 法人摘要
+                st.markdown(
+                    f"外資：**{flow.get('foreign_net', 0):+,}** 張 | "
+                    f"投信：**{flow.get('trust_net', 0):+,}** 張 | "
+                    f"自營：**{flow.get('dealer_net', 0):+,}** 張"
+                )
+            except Exception as e:
+                st.info(f"法人資料載入中… ({e})")
+        else:
+            st.markdown("#### 06 法人買賣超")
+            st.info("美股不提供三大法人買賣超資料")
 
     # ══════════════════════════════════════════════
     # Row 3 — 風險與信心（3 欄）
     # ══════════════════════════════════════════════
     r3c1, r3c2, r3c3 = st.columns(3)
 
-    # ── 07 隔日沖風險 ────────────────────────────
+    # ── 07 隔日沖風險（台股專屬）────────────────────
     with r3c1, st.container(border=True):
-        st.markdown("#### 07 隔日沖風險")
-        try:
-            from atlas.strategy.daytrader_risk import DaytraderRiskAnalyzer
-            dtr = DaytraderRiskAnalyzer()
-            flow_for_dtr = {}
+        if is_tw:
+            st.markdown("#### 07 隔日沖風險")
             try:
-                fl = fetch_institutional_flow(code)
-                flow_for_dtr = {
-                    "foreign": fl.get("foreign_net", 0),
-                    "trust": fl.get("trust_net", 0),
-                    "dealer": fl.get("dealer_net", 0),
-                    "total": fl.get("total_net", 0),
-                }
-            except Exception:
-                pass
+                from atlas.strategy.daytrader_risk import DaytraderRiskAnalyzer
+                dtr = DaytraderRiskAnalyzer()
+                flow_for_dtr = {}
+                try:
+                    fl = fetch_institutional_flow(code)
+                    flow_for_dtr = {
+                        "foreign": fl.get("foreign_net", 0),
+                        "trust": fl.get("trust_net", 0),
+                        "dealer": fl.get("dealer_net", 0),
+                        "total": fl.get("total_net", 0),
+                    }
+                except Exception:
+                    pass
 
-            dtr_result = dtr.analyze(
-                code, ohlcv_df, fund_flow_data=flow_for_dtr,
-            )
+                dtr_result = dtr.analyze(
+                    code, ohlcv_df, fund_flow_data=flow_for_dtr,
+                )
 
-            risk_color = {
-                "高": c.get("negative", "red"),
-                "中": c["warning"],
-                "低": c.get("positive", "green"),
-            }.get(dtr_result.risk_level, c["neutral"])
+                risk_color = {
+                    "高": c.get("negative", "red"),
+                    "中": c["warning"],
+                    "低": c.get("positive", "green"),
+                }.get(dtr_result.risk_level, c["neutral"])
 
-            st.markdown(
-                f"<div style='text-align:center; font-size:48px; "
-                f"font-weight:800; color:{risk_color};'>"
-                f"{dtr_result.risk_score}</div>"
-                f"<div style='text-align:center; font-size:18px; "
-                f"color:{risk_color};'>"
-                f"風險等級：{dtr_result.risk_level}</div>",
-                unsafe_allow_html=True,
-            )
-            st.divider()
-            st.markdown(
-                f"量比：**{dtr_result.volume_ratio:.2f}** | "
-                f"週轉率：**{dtr_result.turnover_rate:.2f}%** | "
-                f"振幅：**{dtr_result.intraday_swing:.2f}%**"
-            )
-            if dtr_result.signals:
-                for sig in dtr_result.signals:
-                    st.warning(sig)
-            else:
-                st.success("目前無隔日沖風險訊號")
-        except Exception as e:
-            st.info(f"隔日沖風險載入中… ({e})")
+                st.markdown(
+                    f"<div style='text-align:center; font-size:48px; "
+                    f"font-weight:800; color:{risk_color};'>"
+                    f"{dtr_result.risk_score}</div>"
+                    f"<div style='text-align:center; font-size:18px; "
+                    f"color:{risk_color};'>"
+                    f"風險等級：{dtr_result.risk_level}</div>",
+                    unsafe_allow_html=True,
+                )
+                st.divider()
+                st.markdown(
+                    f"量比：**{dtr_result.volume_ratio:.2f}** | "
+                    f"週轉率：**{dtr_result.turnover_rate:.2f}%** | "
+                    f"振幅：**{dtr_result.intraday_swing:.2f}%**"
+                )
+                if dtr_result.signals:
+                    for sig in dtr_result.signals:
+                        st.warning(sig)
+                else:
+                    st.success("目前無隔日沖風險訊號")
+            except Exception as e:
+                st.info(f"隔日沖風險載入中… ({e})")
+        else:
+            st.markdown("#### 07 隔日沖風險")
+            st.info("美股無隔日沖概念，此區塊不適用")
 
     # ── 08 健康度評估 ────────────────────────────
     with r3c2, st.container(border=True):
@@ -556,16 +577,24 @@ def render() -> None:  # noqa: C901
             tech_health = max(0, min(100, rsi_score))
             fund_health = max(0, min(100, vol_score))
             vol_health = volatility_score
-            inst_health = max(0, min(
-                100, 50 + int(flow.get("total_net", 0) / 100)
-            ))
+
+            if is_tw:
+                try:
+                    _flow_for_health = fetch_institutional_flow(code)
+                    inst_health = max(0, min(
+                        100, 50 + int(_flow_for_health.get("total_net", 0) / 100)
+                    ))
+                except Exception:
+                    inst_health = 50
+            else:
+                inst_health = 50  # 美股無法人資料，預設中性
 
             metrics = [
                 {"name": "籌碼", "value": chip_health},
                 {"name": "技術", "value": tech_health},
                 {"name": "資金", "value": fund_health},
                 {"name": "波動", "value": vol_health},
-                {"name": "法人", "value": inst_health},
+                {"name": "法人" if is_tw else "動能", "value": inst_health},
             ]
             fig = gauge_rings(
                 metrics, columns=5, height=220, dark=dark,
@@ -695,106 +724,113 @@ def render() -> None:  # noqa: C901
     # ══════════════════════════════════════════════
     r5c1, r5c2 = st.columns(2)
 
-    # ── 12 大戶趨勢分布 ────────────────────────────
+    # ── 12 大戶趨勢分布（台股專屬）──────────────────
     with r5c1, st.container(border=True):
         st.markdown("#### 12 大戶趨勢分布")
-        try:
-            from atlas.domain.large_trader_analysis import (
-                LargeTraderAnalyzer,
-            )
-            from atlas.infrastructure.taifex_large_trader import (
-                LargeTraderFetcher,
-            )
-
-            fetcher = LargeTraderFetcher()
-            lt_data = fetcher.fetch()
-            if lt_data:
-                analyzer = LargeTraderAnalyzer()
-                lt_signal = analyzer.analyze(lt_data)
-
-                # 大戶買賣盤 gauge
-                lg_metrics = [
-                    {"name": "大戶買盤", "value": int(lt_signal.large_buy_pct)},
-                    {"name": "散戶買盤", "value": int(lt_signal.retail_buy_pct)},
-                    {"name": "散戶賣壓", "value": int(lt_signal.retail_sell_pct)},
-                ]
-                fig = gauge_rings(lg_metrics, columns=3, height=200, dark=dark)
-                st.plotly_chart(fig, use_container_width=True)
-
-                # 訊號文字
-                sig_color = (
-                    c["positive"] if "偏多" in lt_signal.signal
-                    else c["negative"] if "偏空" in lt_signal.signal
-                    else c["warning"]
+        if is_tw:
+            try:
+                from atlas.domain.large_trader_analysis import (
+                    LargeTraderAnalyzer,
                 )
-                st.markdown(
-                    f"<div style='text-align:center; font-size:20px; "
-                    f"font-weight:700; color:{sig_color};'>"
-                    f"大戶：{lt_signal.signal}</div>",
-                    unsafe_allow_html=True,
+                from atlas.infrastructure.taifex_large_trader import (
+                    LargeTraderFetcher,
                 )
-                st.caption(f"信心度：{lt_signal.confidence}% | 資料日期：{lt_data.date}")
-            else:
-                st.info("大額交易人資料暫無法取得（非交易日或盤中）")
-        except Exception as e:
-            st.info(f"大戶分布載入中… ({e})")
 
-    # ── 13 散戶動向（反指標）────────────────────────
+                fetcher = LargeTraderFetcher()
+                lt_data = fetcher.fetch()
+                if lt_data:
+                    analyzer = LargeTraderAnalyzer()
+                    lt_signal = analyzer.analyze(lt_data)
+
+                    # 大戶買賣盤 gauge
+                    lg_metrics = [
+                        {"name": "大戶買盤", "value": int(lt_signal.large_buy_pct)},
+                        {"name": "散戶買盤", "value": int(lt_signal.retail_buy_pct)},
+                        {"name": "散戶賣壓", "value": int(lt_signal.retail_sell_pct)},
+                    ]
+                    fig = gauge_rings(lg_metrics, columns=3, height=200, dark=dark)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    # 訊號文字
+                    sig_color = (
+                        c["positive"] if "偏多" in lt_signal.signal
+                        else c["negative"] if "偏空" in lt_signal.signal
+                        else c["warning"]
+                    )
+                    st.markdown(
+                        f"<div style='text-align:center; font-size:20px; "
+                        f"font-weight:700; color:{sig_color};'>"
+                        f"大戶：{lt_signal.signal}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.caption(f"信心度：{lt_signal.confidence}% | 資料日期：{lt_data.date}")
+                else:
+                    st.info("大額交易人資料暫無法取得（非交易日或盤中）")
+            except Exception as e:
+                st.info(f"大戶分布載入中… ({e})")
+        else:
+            st.info("美股不提供大額交易人資料")
+
+    # ── 13 散戶動向（反指標，台股專屬）────────────────
     with r5c2, st.container(border=True):
         st.markdown("#### 13 散戶動向（反指標）")
-        try:
-            if lt_data and lt_signal:
-                # 散戶多空能量條
-                retail_bull = lt_signal.retail_buy_pct
-                retail_bear = lt_signal.retail_sell_pct
-                fig = energy_bar(
-                    retail_bull, retail_bear,
-                    title="散戶多空能量", height=100, dark=dark,
-                )
-                st.plotly_chart(fig, use_container_width=True)
+        if is_tw:
+            try:
+                if lt_data and lt_signal:
+                    # 散戶多空能量條
+                    retail_bull = lt_signal.retail_buy_pct
+                    retail_bear = lt_signal.retail_sell_pct
+                    fig = energy_bar(
+                        retail_bull, retail_bear,
+                        title="散戶多空能量", height=100, dark=dark,
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
-                # 散戶訊號
-                retail_color = (
-                    c["negative"] if "追漲" in lt_signal.retail_signal
-                    else c["positive"] if "殺跌" in lt_signal.retail_signal
-                    else c["warning"]
-                )
-                st.markdown(
-                    f"<div style='text-align:center; font-size:20px; "
-                    f"font-weight:700; color:{retail_color};'>"
-                    f"散戶：{lt_signal.retail_signal}</div>",
-                    unsafe_allow_html=True,
-                )
-                st.markdown(
-                    "<div style='text-align:center; font-size:13px; "
-                    "color:gray;'>⚠ 散戶動向為反指標："
-                    "散戶追漲時宜謹慎，散戶殺跌時可留意機會</div>",
-                    unsafe_allow_html=True,
-                )
+                    # 散戶訊號
+                    retail_color = (
+                        c["negative"] if "追漲" in lt_signal.retail_signal
+                        else c["positive"] if "殺跌" in lt_signal.retail_signal
+                        else c["warning"]
+                    )
+                    st.markdown(
+                        f"<div style='text-align:center; font-size:20px; "
+                        f"font-weight:700; color:{retail_color};'>"
+                        f"散戶：{lt_signal.retail_signal}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        "<div style='text-align:center; font-size:13px; "
+                        "color:gray;'>⚠ 散戶動向為反指標："
+                        "散戶追漲時宜謹慎，散戶殺跌時可留意機會</div>",
+                        unsafe_allow_html=True,
+                    )
 
-                # 大戶 vs 散戶對比表
-                st.divider()
-                st.markdown(
-                    f"| 指標 | 大戶（前十大） | 散戶 |\n"
-                    f"|------|:---:|:---:|\n"
-                    f"| 買盤 | **{lt_signal.large_buy_pct:.1f}%** "
-                    f"| {lt_signal.retail_buy_pct:.1f}% |\n"
-                    f"| 賣壓 | **{lt_signal.large_sell_pct:.1f}%** "
-                    f"| {lt_signal.retail_sell_pct:.1f}% |\n"
-                    f"| 訊號 | {lt_signal.signal} "
-                    f"| {lt_signal.retail_signal} |"
-                )
-            else:
-                st.info("散戶動向資料暫無法取得")
-        except Exception as e:
-            st.info(f"散戶動向載入中… ({e})")
+                    # 大戶 vs 散戶對比表
+                    st.divider()
+                    st.markdown(
+                        f"| 指標 | 大戶（前十大） | 散戶 |\n"
+                        f"|------|:---:|:---:|\n"
+                        f"| 買盤 | **{lt_signal.large_buy_pct:.1f}%** "
+                        f"| {lt_signal.retail_buy_pct:.1f}% |\n"
+                        f"| 賣壓 | **{lt_signal.large_sell_pct:.1f}%** "
+                        f"| {lt_signal.retail_sell_pct:.1f}% |\n"
+                        f"| 訊號 | {lt_signal.signal} "
+                        f"| {lt_signal.retail_signal} |"
+                    )
+                else:
+                    st.info("散戶動向資料暫無法取得")
+            except Exception as e:
+                st.info(f"散戶動向載入中… ({e})")
+        else:
+            st.info("美股不提供散戶動向資料")
 
     # Footer
     st.divider()
     from datetime import datetime
 
     from atlas.constants import TW_TZ
+    market_label = "台股" if is_tw else "美股"
     st.caption(
-        f"個股：{code} | "
+        f"個股：{code}（{market_label}） | "
         f"更新時間：{datetime.now(TW_TZ).strftime('%H:%M:%S')} | Atlas v5.0"
     )

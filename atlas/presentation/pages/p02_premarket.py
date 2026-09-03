@@ -47,6 +47,10 @@ def render() -> None:
 &nbsp;&nbsp;• <span class="legend-bad">&lt;-0.5%</span> 跳空低開（恐慌殺盤=撿便宜機會）<br>
 <span class="legend-good">資金流向</span>：昨日三大法人買賣超金額，判斷籌碼方向<br>
 <span class="legend-good">產業題材</span>：熱門題材熱度排行，決定今日聚焦哪些族群<br>
+<span class="legend-warn">VIX</span>：&gt;30 極度恐慌、&lt;15 低波動<br>
+<span class="legend-warn">DXY</span>：美元走強→新興市場(台股)壓力<br>
+<span class="legend-warn">10Y殖利率</span>：上升→科技/成長股估值壓力<br>
+<span class="legend-good">恐貪指數</span>：0=極度恐慌(逆勢買入)→100=極度貪婪(追高風險)<br>
 <strong>顏色慣例</strong>：<span class="legend-good">紅色=漲/正面</span>、<span class="legend-bad">綠色=跌/負面</span>（台股標準）
 </div>
 """, unsafe_allow_html=True)
@@ -113,6 +117,122 @@ def render() -> None:
         except Exception:
             st.markdown(metric_card("台指期夜盤", "—", status="neutral"),
                         unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════
+    # Section 1.5: 美股深度指標
+    # ══════════════════════════════════════════════
+    st.divider()
+    st.subheader("美股深度指標")
+
+    cols_us = st.columns(4)
+    # VIX 恐慌指數
+    vix: float | None = None
+    with cols_us[0]:
+        try:
+            vix_q = fetch_stock_quote("^VIX")
+            vix = vix_q["price"]
+            vix_chg = _pct_change(vix_q)
+            vix_pts = vix - vix_q.get("prev_close", vix)
+            if vix > 30:
+                vix_status, vix_hint = "negative", "極度恐慌"
+            elif vix > 20:
+                vix_status, vix_hint = "neutral", "偏高警戒"
+            elif vix < 15:
+                vix_status, vix_hint = "positive", "低波動"
+            else:
+                vix_status, vix_hint = "neutral", "正常"
+            st.markdown(metric_card(
+                "VIX 恐慌指數", f"{vix:.2f}",
+                delta=f"{vix_pts:+.2f}（{vix_chg:+.2f}%）{vix_hint}",
+                status=vix_status,
+            ), unsafe_allow_html=True)
+        except Exception:
+            st.markdown(metric_card("VIX", "—", status="neutral"), unsafe_allow_html=True)
+
+    # Russell 2000
+    with cols_us[1]:
+        try:
+            rut_q = fetch_stock_quote("^RUT")
+            rut_price = rut_q["price"]
+            rut_pts = rut_price - rut_q.get("prev_close", rut_price)
+            rut_chg = _pct_change(rut_q)
+            status = "positive" if rut_chg > 0 else "negative" if rut_chg < 0 else "neutral"
+            st.markdown(metric_card(
+                "Russell 2000", f"{rut_price:,.2f}",
+                delta=f"{rut_pts:+,.2f} 點（{rut_chg:+.2f}%）",
+                status=status,
+            ), unsafe_allow_html=True)
+        except Exception:
+            st.markdown(metric_card("Russell 2000", "—", status="neutral"), unsafe_allow_html=True)
+
+    # 美元指數 DXY
+    with cols_us[2]:
+        try:
+            dxy_q = fetch_stock_quote("DX-Y.NYB")
+            dxy = dxy_q["price"]
+            dxy_pts = dxy - dxy_q.get("prev_close", dxy)
+            dxy_chg = _pct_change(dxy_q)
+            status = "negative" if dxy_chg > 0.3 else "positive" if dxy_chg < -0.3 else "neutral"
+            st.markdown(metric_card(
+                "美元指數 DXY", f"{dxy:.2f}",
+                delta=f"{dxy_pts:+.2f}（{dxy_chg:+.2f}%）",
+                status=status,
+            ), unsafe_allow_html=True)
+        except Exception:
+            st.markdown(metric_card("美元指數", "—", status="neutral"), unsafe_allow_html=True)
+
+    # 10 年期美債殖利率
+    with cols_us[3]:
+        try:
+            tny_q = fetch_stock_quote("^TNX")
+            tny = tny_q["price"]
+            tny_pts = tny - tny_q.get("prev_close", tny)
+            status = "negative" if tny_pts > 0.03 else "positive" if tny_pts < -0.03 else "neutral"
+            hint = "殖利率上升" if tny_pts > 0 else "殖利率下降" if tny_pts < 0 else ""
+            st.markdown(metric_card(
+                "10Y 美債殖利率", f"{tny:.3f}%",
+                delta=f"{tny_pts:+.3f}%　{hint}",
+                status=status,
+            ), unsafe_allow_html=True)
+        except Exception:
+            st.markdown(metric_card("10Y 殖利率", "—", status="neutral"), unsafe_allow_html=True)
+
+    # 恐貪指數估算（簡化版：VIX 60% + S&P 動能 40%）
+    st.subheader("恐貪指數（估算）")
+    try:
+        vix_score = max(0, min(100, int(100 - (vix - 12) * 4))) if vix else 50
+
+        sp_df = fetch_stock_data("^GSPC", "1mo")
+        if sp_df is not None and len(sp_df) >= 20:
+            sp_mom = (float(sp_df["close"].iloc[-1]) / float(sp_df["close"].iloc[0]) - 1) * 100
+            mom_score = max(0, min(100, 50 + int(sp_mom * 5)))
+        else:
+            mom_score = 50
+
+        fear_greed = int(vix_score * 0.6 + mom_score * 0.4)
+
+        if fear_greed >= 75:
+            fg_label, fg_status = "極度貪婪", "negative"
+        elif fear_greed >= 55:
+            fg_label, fg_status = "貪婪", "neutral"
+        elif fear_greed >= 45:
+            fg_label, fg_status = "中性", "neutral"
+        elif fear_greed >= 25:
+            fg_label, fg_status = "恐慌", "neutral"
+        else:
+            fg_label, fg_status = "極度恐慌", "positive"
+
+        fig = gauge_chart(fear_greed, title=f"恐貪指數：{fg_label}", height=250)
+        col_fg, col_fg_detail = st.columns([1, 1])
+        with col_fg:
+            st.plotly_chart(fig, use_container_width=True)
+        with col_fg_detail:
+            st.markdown(metric_card("恐貪指數", str(fear_greed), fg_label, fg_status),
+                        unsafe_allow_html=True)
+            st.caption(f"VIX 因子：{vix_score} | 動能因子：{mom_score}")
+            st.caption("0=極度恐慌（買入機會）→ 100=極度貪婪（追高風險）")
+    except Exception:
+        st.info("恐貪指數計算中...")
 
     # ══════════════════════════════════════════════
     # Section 2: ADR 表現 + 缺口預測

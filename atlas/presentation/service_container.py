@@ -584,3 +584,92 @@ TW_TOP_STOCKS = [
     # OTC (上櫃) stocks
     ("6669", "緯穎"), ("5269", "祥碩"), ("6488", "環球晶"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# 美股資料抓取
+# ---------------------------------------------------------------------------
+
+def fetch_us_stock_data(ticker: str, period: str = "6mo") -> Any:
+    """用 yfinance 取得美股歷史資料（快取 10 分鐘）。"""
+    import pandas as pd
+
+    @st.cache_data(ttl=600)
+    def _fetch(ticker: str, period: str) -> pd.DataFrame:
+        import yfinance as yf
+
+        t = yf.Ticker(ticker)
+        df = t.history(period=period)
+        if df is None or df.empty:
+            return pd.DataFrame()
+        df = df.rename(columns={
+            "Open": "open", "High": "high", "Low": "low",
+            "Close": "close", "Volume": "volume",
+        })
+        return df[["open", "high", "low", "close", "volume"]].copy()
+
+    return _fetch(ticker, period)
+
+
+def fetch_us_stock_quote(ticker: str) -> dict[str, Any]:
+    """取得美股即時報價（快取 5 分鐘）。"""
+
+    @st.cache_data(ttl=300)
+    def _fetch(ticker: str) -> dict:
+        import yfinance as yf
+
+        t = yf.Ticker(ticker)
+        try:
+            info = t.fast_info
+            return {
+                "price": float(info.last_price or 0),
+                "prev_close": float(info.previous_close or 0),
+                "open": float(info.open or 0),
+                "day_high": float(info.day_high or 0),
+                "day_low": float(info.day_low or 0),
+                "volume": int(info.last_volume or 0),
+                "market_cap": float(getattr(info, "market_cap", 0) or 0),
+                "source": "yfinance",
+            }
+        except Exception:
+            return {
+                "price": 0, "prev_close": 0, "open": 0,
+                "day_high": 0, "day_low": 0, "volume": 0,
+                "market_cap": 0, "source": "error",
+            }
+
+    return _fetch(ticker)
+
+
+def fetch_us_financials(ticker: str) -> dict[str, Any]:
+    """取得美股基本面資料（快取 1 小時）。"""
+
+    @st.cache_data(ttl=3600)
+    def _fetch(ticker: str) -> dict:
+        import yfinance as yf
+
+        t = yf.Ticker(ticker)
+        info: dict[str, Any] = {}
+        with contextlib.suppress(Exception):
+            info = t.info or {}
+
+        return {
+            "eps": info.get("trailingEps"),
+            "pe_ratio": info.get("trailingPE"),
+            "pb_ratio": info.get("priceToBook"),
+            "market_cap": info.get("marketCap"),
+            "dividend_yield": info.get("dividendYield"),
+            "revenue": info.get("totalRevenue"),
+            "profit_margin": info.get("profitMargins"),
+            "sector": info.get("sector"),
+            "industry": info.get("industry"),
+        }
+
+    return _fetch(ticker)
+
+
+def fetch_market_data(code: str, market: str = "TW", period: str = "6mo") -> Any:
+    """根據市場取得歷史資料（統一入口）。"""
+    if market == "US":
+        return fetch_us_stock_data(code, period)
+    return fetch_stock_data(code, period)

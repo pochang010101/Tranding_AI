@@ -60,8 +60,23 @@ def _run_smart_scan() -> tuple[pd.DataFrame, str]:
     return df, date_str
 
 
+# ── 入口 ──────────────────────────────────────
+
 def render() -> None:
-    st.title("🔍 每日選股")
+    market = st.session_state.get("market", "TW")
+    if market == "US":
+        st.title("🔍 美股選股")
+        _render_us_screener()
+    else:
+        st.title("🔍 每日選股")
+        _render_tw_screener()
+
+
+# ══════════════════════════════════════════════
+# 台股選股（原有邏輯，不做任何修改）
+# ══════════════════════════════════════════════
+
+def _render_tw_screener() -> None:
     get_colors()
 
     # ── 圖例說明 ──
@@ -476,3 +491,353 @@ def _push_to_line(df: pd.DataFrame) -> None:
         st.success("已推送到 LINE！")
     else:
         st.error("LINE 推送失敗，請確認 .env 中的 LINE_CHANNEL_ACCESS_TOKEN 是否正確。")
+
+
+# ══════════════════════════════════════════════
+# 美股選股
+# ══════════════════════════════════════════════
+
+def _render_us_screener() -> None:
+    get_colors()
+
+    # ── 圖例說明 ──
+    st.markdown("""
+    <div class="legend-box">
+    <strong>選股邏輯</strong>：掃描美股 Top 股票池 → 技術面評分（動能 + RSI + 均線排列 + MACD + 量比）<br>
+    <strong>選股分數</strong>：綜合技術面指標，<span class="legend-good">≥40 強勢推薦</span>、<span class="legend-warn">20~40 值得關注</span>、<span class="legend-bad">&lt;20 偏弱</span><br>
+    <strong>RSI(14)</strong>：<span class="legend-bad">&gt;70 超買</span>、50 多空平衡、<span class="legend-good">&lt;30 超賣反彈機會</span><br>
+    <strong>均線排列</strong>：<span class="legend-good">多頭排列</span> MA8&gt;MA21&gt;MA55 | <span class="legend-bad">空頭排列</span> MA8&lt;MA21&lt;MA55 | 糾結 其他<br>
+    <strong>量比</strong>：當日成交量 / 20日均量，<span class="legend-good">&gt;1.5 放量</span>、<span class="legend-warn">1.0~1.5 正常</span>、<span class="legend-bad">&lt;1.0 縮量</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    from atlas.constants_us import US_SECTORS
+
+    # ── 篩選條件 ──
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        sector_filter = st.multiselect("產業篩選", US_SECTORS, default=[])
+    with col2:
+        sort_by = st.selectbox("排序依據", [
+            "綜合分數", "動能(20日)", "RSI", "成交量變化",
+        ])
+    with col3:
+        top_n = st.slider("顯示檔數", 10, 40, 20)
+
+    run_btn = st.button("🔍 開始選股", type="primary", width="stretch")
+
+    # ── 執行掃描 ──
+    if run_btn:
+        st.session_state["us_scan_result"] = None
+
+    us_result: list[dict] | None = st.session_state.get("us_scan_result")
+
+    if run_btn or us_result is None:
+        with st.spinner("掃描美股中，約需 15~60 秒…"):
+            try:
+                us_result = _scan_us_stocks(sector_filter, sort_by, top_n)
+                st.session_state["us_scan_result"] = us_result
+            except Exception as exc:
+                st.error(f"掃描失敗：{exc}")
+                return
+
+    if not us_result:
+        st.warning("掃描無結果。請稍後再試或調整篩選條件。")
+        return
+
+    _display_us_results(us_result, top_n)
+
+
+def _scan_us_stocks(
+    sector_filter: list[str], sort_by: str, top_n: int
+) -> list[dict]:
+    """掃描美股，以技術面評分排序。"""
+    from atlas.constants_us import US_TOP_STOCKS
+    from atlas.presentation.service_container import fetch_us_stock_data, get_indicator_lib
+
+    candidates = US_TOP_STOCKS
+    if sector_filter:
+        candidates = [(t, n, s) for t, n, s in candidates if s in sector_filter]
+
+    results: list[dict] = []
+    lib = get_indicator_lib()
+
+    for ticker, name, sector in candidates:
+        try:
+            df = fetch_us_stock_data(ticker, "6mo")
+            if df is None or df.empty or len(df) < 20:
+                continue
+
+            ind = lib.calculate_all(df)
+            last = ind.iloc[-1]
+            prev = ind.iloc[-2]
+
+            close = float(last["close"])
+            change_pct = (close / float(prev["close"]) - 1) * 100
+
+            # 技術面評分
+            score = 0
+            rsi = float(last.get("RSI14", 50))
+            if pd.isna(rsi):
+                rsi = 50
+
+            # 動能分（20日）
+            mom_20 = (close / float(df["close"].iloc[-20]) - 1) * 100 if len(df) >= 20 else 0.0
+            score += min(30, max(-30, int(mom_20 * 3)))
+
+            # RSI 分
+            if 40 <= rsi <= 60:
+                score += 10
+            elif rsi < 30:
+                score += 20
+            elif rsi > 70:
+                score -= 10
+
+            # 均線排列
+            ma8 = float(last.get("MA8", 0))
+            ma21 = float(last.get("MA21", 0))
+            ma55 = float(last.get("MA55", 0))
+            if ma8 > ma21 > ma55 > 0:
+                score += 20
+                ma_text = "多頭排列"
+            elif ma8 < ma21 < ma55 and ma55 > 0:
+                score -= 10
+                ma_text = "空頭排列"
+            else:
+                ma_text = "糾結"
+
+            # MACD
+            macd_hist = float(last.get("MACD_hist", 0))
+            if pd.isna(macd_hist):
+                macd_hist = 0
+            if macd_hist > 0:
+                score += 10
+            elif macd_hist < 0:
+                score -= 5
+
+            # 量能
+            vol = float(last["volume"])
+            vol_avg = float(df["volume"].iloc[-20:].mean()) if len(df) >= 20 else vol
+            vol_ratio = vol / vol_avg if vol_avg > 0 else 1.0
+
+            if vol_ratio > 1.5:
+                score += 10
+
+            results.append({
+                "代碼": ticker,
+                "名稱": name,
+                "產業": sector,
+                "收盤": round(close, 2),
+                "漲跌%": round(change_pct, 2),
+                "選股分數": score,
+                "RSI": round(rsi, 1),
+                "20日動能%": round(mom_20, 2),
+                "均線排列": ma_text,
+                "量比": round(vol_ratio, 2),
+                "MACD": round(macd_hist, 3),
+            })
+        except Exception:
+            continue
+
+    # 排序
+    if sort_by == "動能(20日)":
+        results.sort(key=lambda x: x["20日動能%"], reverse=True)
+    elif sort_by == "RSI":
+        results.sort(key=lambda x: abs(x["RSI"] - 50))
+    elif sort_by == "成交量變化":
+        results.sort(key=lambda x: x["量比"], reverse=True)
+    else:
+        results.sort(key=lambda x: x["選股分數"], reverse=True)
+
+    return results[:top_n]
+
+
+def _display_us_results(results: list[dict], top_n: int) -> None:
+    """顯示美股選股結果：統計卡片 + 表格 + 圖表 + 觀察股。"""
+
+    result_df = pd.DataFrame(results)
+
+    # ── 統計卡片 ──
+    st.divider()
+    st.subheader("掃描結果統計")
+    total = len(result_df)
+    bull_count = len(result_df[result_df["均線排列"] == "多頭排列"])
+    high_mom = len(result_df[result_df["20日動能%"] > 5])
+    high_vol = len(result_df[result_df["量比"] > 1.5])
+    high_score = len(result_df[result_df["選股分數"] >= 40])
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        st.markdown(metric_card("掃描命中", str(total), status="positive"),
+                    unsafe_allow_html=True)
+    with c2:
+        st.markdown(metric_card("多頭排列", str(bull_count),
+                    status="positive" if bull_count > 0 else "neutral"),
+                    unsafe_allow_html=True)
+    with c3:
+        st.markdown(metric_card("強動能(>5%)", str(high_mom), status="positive"),
+                    unsafe_allow_html=True)
+    with c4:
+        st.markdown(metric_card("放量(>1.5)", str(high_vol), status="positive"),
+                    unsafe_allow_html=True)
+    with c5:
+        st.markdown(metric_card("高分(>=40)", str(high_score),
+                    status="positive" if high_score > 0 else "neutral"),
+                    unsafe_allow_html=True)
+
+    # ── 結果表格 ──
+    st.divider()
+    st.subheader(f"美股選股清單（共 {total} 檔）")
+
+    # ── 觀察股操作區 ──
+    existing_watchlist: list[str] = st.session_state.get("watchlist_codes", [])
+    col_w0, col_w1, col_w2, col_w3, col_w4 = st.columns([0.5, 1, 1, 1, 2])
+    with col_w0:
+        select_all = st.checkbox("全選", key="us_screener_select_all")
+    with col_w1:
+        add_watchlist_btn = st.button("⭐ 加入觀察股", type="primary",
+                                      width="stretch", key="us_add_watch")
+    with col_w2:
+        add_all_btn = st.button("⭐ 全選加入觀察股", width="stretch",
+                                key="us_add_all_watch")
+    with col_w3:
+        if existing_watchlist and st.button("🗑 清空觀察股", width="stretch",
+                                            key="us_clear_watch"):
+            st.session_state["watchlist_codes"] = []
+            _persist_watchlist([])
+            st.rerun()
+    with col_w4:
+        if existing_watchlist:
+            st.info(
+                f"觀察股 {len(existing_watchlist)} 檔："
+                f"{', '.join(existing_watchlist[:10])}"
+                f"{'…' if len(existing_watchlist) > 10 else ''}"
+            )
+        else:
+            st.caption("勾選下方表格左側「觀察」欄，再點加入觀察股。")
+
+    show_df = result_df.copy()
+    show_df.insert(0, "觀察", select_all)
+
+    edited_df = st.data_editor(
+        show_df,
+        width="stretch",
+        hide_index=True,
+        height=min(600, 40 + len(show_df) * 35),
+        column_config={
+            "觀察": st.column_config.CheckboxColumn("觀察", default=False, width="small"),
+            "選股分數": st.column_config.ProgressColumn(min_value=-50, max_value=100, format="%.0f"),
+            "RSI": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
+            "漲跌%": st.column_config.NumberColumn(format="%+.2f%%"),
+            "收盤": st.column_config.NumberColumn(format="$%.2f"),
+            "20日動能%": st.column_config.NumberColumn(format="%+.2f%%"),
+            "量比": st.column_config.NumberColumn(format="%.2f"),
+            "MACD": st.column_config.NumberColumn(format="%.3f"),
+        },
+        disabled=[c for c in show_df.columns if c != "觀察"],
+        key="us_screener_editor",
+    )
+
+    # 處理全選加入觀察股
+    if add_all_btn:
+        all_codes = show_df["代碼"].astype(str).tolist()
+        n_existing = len(existing_watchlist)
+        merged = list(dict.fromkeys(existing_watchlist + all_codes))
+        st.session_state["watchlist_codes"] = merged
+        _persist_watchlist(merged)
+        added = len(merged) - n_existing
+        st.success(f"已全選加入 {added} 檔觀察股（去重後共 {len(merged)} 檔）。")
+
+    # 處理勾選加入觀察股
+    if add_watchlist_btn:
+        selected = edited_df[edited_df["觀察"] == True]  # noqa: E712
+        if selected.empty:
+            st.warning("請先勾選表格中要加入觀察的股票。")
+        else:
+            new_codes = selected["代碼"].astype(str).tolist()
+            n_existing = len(existing_watchlist)
+            merged = list(dict.fromkeys(existing_watchlist + new_codes))
+            st.session_state["watchlist_codes"] = merged
+            _persist_watchlist(merged)
+            added = len(merged) - n_existing
+            st.success(f"已加入 {added} 檔觀察股（去重後共 {len(merged)} 檔）。")
+
+    # ── 圖表區 ──
+    st.divider()
+    col_a, col_b = st.columns(2)
+
+    top10 = result_df.head(10)
+
+    with col_a:
+        st.subheader("選股分數 — Top 10")
+        if not top10.empty:
+            labels = [f"{r['代碼']}\n{r['名稱']}" for _, r in top10.iterrows()]
+            fig = bar_chart(
+                labels=labels,
+                values=top10["選股分數"].tolist(),
+                title="選股分數排行",
+                height=350,
+            )
+            st.plotly_chart(fig, width="stretch")
+
+    with col_b:
+        st.subheader("20日動能 — Top 10")
+        if not top10.empty:
+            labels = [f"{r['代碼']}\n{r['名稱']}" for _, r in top10.iterrows()]
+            mom_vals = top10["20日動能%"].tolist()
+            colors = ["#4caf50" if v >= 0 else "#f44336" for v in mom_vals]
+
+            fig2 = go.Figure(go.Bar(
+                x=labels, y=mom_vals,
+                marker_color=colors,
+                text=[f"{v:+.1f}%" for v in mom_vals],
+                textposition="outside",
+            ))
+            fig2.update_layout(
+                title="20日動能排行 (%)",
+                height=350,
+                margin=dict(l=0, r=0, t=40, b=0),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#e0e0e0"),
+            )
+            fig2.add_hline(y=0, line_color="#555")
+            st.plotly_chart(fig2, width="stretch")
+
+    # ── 產業分佈 ──
+    st.divider()
+    st.subheader("產業分佈")
+    sector_counts: dict[str, int] = {}
+    for r in results:
+        s = r["產業"]
+        sector_counts[s] = sector_counts.get(s, 0) + 1
+
+    if sector_counts:
+        sorted_sectors = sorted(sector_counts.items(), key=lambda x: x[1], reverse=True)
+        s_names = [x[0] for x in sorted_sectors]
+        s_counts = [x[1] for x in sorted_sectors]
+
+        fig3 = go.Figure(go.Bar(
+            x=s_names, y=s_counts,
+            marker_color="#42a5f5",
+            text=[str(c) for c in s_counts],
+            textposition="outside",
+        ))
+        fig3.update_layout(
+            title="各產業命中數",
+            height=300,
+            margin=dict(l=0, r=0, t=40, b=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#e0e0e0"),
+            xaxis=dict(showgrid=False),
+        )
+        st.plotly_chart(fig3, width="stretch")
+
+    # ── 匯出 ──
+    st.divider()
+    col_e1, col_e2 = st.columns([3, 1])
+    with col_e2:
+        csv = result_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("📥 匯出 CSV", csv, "us_scan_result.csv", "text/csv",
+                           width="stretch")

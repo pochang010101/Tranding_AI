@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from atlas.constants_us import US_TOP_STOCKS
 from atlas.presentation.components.analysis_charts import (
     institutional_flow_chart,
     volume_profile_chart,
@@ -45,7 +46,18 @@ def render() -> None:
     c = get_colors()
 
     # ── 股票選擇 ─────────────────────────────────
-    stock_labels = [f"{code} {name}" for code, name in TW_TOP_STOCKS]
+    market = st.session_state.get("market", "TW")
+    is_tw = market == "TW"
+
+    if market == "US":
+        stock_labels = [f"{t} {n}" for t, n, _ in US_TOP_STOCKS]
+        default_code = "AAPL"
+        placeholder = "e.g. AAPL"
+    else:
+        stock_labels = [f"{code} {name}" for code, name in TW_TOP_STOCKS]
+        default_code = "2330"
+        placeholder = "e.g. 2330"
+
     col_sel, col_custom = st.columns([3, 2])
     with col_sel:
         selected_label = st.selectbox(
@@ -53,7 +65,9 @@ def render() -> None:
         )
     with col_custom:
         if selected_label == "（自訂代碼）":
-            custom_code = st.text_input("自訂股票代碼", value="2330", placeholder="e.g. 2330")
+            custom_code = st.text_input(
+                "自訂股票代碼", value=default_code, placeholder=placeholder,
+            )
             code = custom_code.strip()
         else:
             code = selected_label.split()[0]
@@ -369,28 +383,29 @@ def render() -> None:
         )
         st.plotly_chart(fig_sub, width="stretch")
 
-    # ── 三大法人買賣超 ──────────────────────────────
-    try:
-        flow = fetch_institutional_flow(code)
-        if flow.get("source") != "unavailable":
-            st.subheader("三大法人買賣超")
-            flow_dates = [flow.get("date", "")]
-            flow_foreign = [flow.get("foreign_net", 0)]
-            flow_trust = [flow.get("trust_net", 0)]
-            flow_dealer = [flow.get("dealer_net", 0)]
-            flow_total = [flow.get("total_net", 0)]
-            fig_flow = institutional_flow_chart(
-                dates=flow_dates,
-                foreign=flow_foreign,
-                trust=flow_trust,
-                dealer=flow_dealer,
-                total=flow_total,
-            )
-            st.plotly_chart(fig_flow, width="stretch")
-        else:
-            st.info("法人資料尚未載入")
-    except Exception as e:
-        st.warning(f"法人買賣超圖表略過：{e}")
+    # ── 三大法人買賣超（台股專屬）──────────────────────
+    if is_tw:
+        try:
+            flow = fetch_institutional_flow(code)
+            if flow.get("source") != "unavailable":
+                st.subheader("三大法人買賣超")
+                flow_dates = [flow.get("date", "")]
+                flow_foreign = [flow.get("foreign_net", 0)]
+                flow_trust = [flow.get("trust_net", 0)]
+                flow_dealer = [flow.get("dealer_net", 0)]
+                flow_total = [flow.get("total_net", 0)]
+                fig_flow = institutional_flow_chart(
+                    dates=flow_dates,
+                    foreign=flow_foreign,
+                    trust=flow_trust,
+                    dealer=flow_dealer,
+                    total=flow_total,
+                )
+                st.plotly_chart(fig_flow, width="stretch")
+            else:
+                st.info("法人資料尚未載入")
+        except Exception as e:
+            st.warning(f"法人買賣超圖表略過：{e}")
 
     # ── 成本分布圖 ────────────────────────────────
     try:

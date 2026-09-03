@@ -37,6 +37,16 @@ def render_sidebar() -> str:
         st.caption("量化交易決策系統")
         st.divider()
 
+        # ── 市場切換 ──
+        market_radio = st.radio(
+            "市場", ["🇹🇼 台股", "🇺🇸 美股"],
+            horizontal=True, key="market_radio",
+            index=0 if st.session_state.get("market", "TW") == "TW" else 1,
+        )
+        st.session_state["market"] = "TW" if "台股" in market_radio else "US"
+
+        st.divider()
+
         theme_label = "🌙 深色" if st.session_state.get("theme", "dark") == "dark" else "☀️ 亮色"
         if st.button(f"切換至 {'☀️ 亮色' if theme_label.startswith('🌙') else '🌙 深色'}",
                       width="stretch"):
