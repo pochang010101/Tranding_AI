@@ -16,6 +16,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# 外資期貨未平倉淨口數 → 情緒分數映射錨點
+_FUTURES_NET_UPPER = 20000  # 淨多單 >= 此值 → 90 分
+_FUTURES_NET_HIGH = 10000   # 淨多單 >= 此值 → 70 分
+_FUTURES_NET_LOW = -10000   # 淨空單 >= 此值 → 30 分
+_FUTURES_NET_LOWER = -20000 # 淨空單 >= 此值 → 10 分
+
 _CACHE_KEY = "sentiment:{market}"
 _CACHE_TTL = 3600
 
@@ -101,14 +107,17 @@ class SentimentService(ISentimentService):
         ad_score = await self._calc_advance_decline_score(market)
         components["advance_decline"] = ad_score
 
-        # Factor 2: 外資期貨未平倉 → 簡化為 50（需即時資料）
-        components["foreign_futures"] = 50.0
+        # Factor 2: 外資期貨未平倉
+        ff_score = self._calc_foreign_futures_score()
+        components["foreign_futures"] = ff_score
 
-        # Factor 3: 融資維持率 → 簡化為 50
-        components["margin_ratio"] = 50.0
+        # Factor 3: 融資使用率（替代維持率，全市場餘額/限額）
+        mr_score = self._calc_margin_usage_score()
+        components["margin_ratio"] = mr_score
 
-        # Factor 4: VIX → 簡化為 50
-        components["vix"] = 50.0
+        # Factor 4: P/C Ratio（替代 VIX）
+        pc_score = self._calc_pc_ratio_score()
+        components["vix"] = pc_score
 
         # 加權計算
         weights = {"advance_decline": 0.3, "foreign_futures": 0.3, "margin_ratio": 0.2, "vix": 0.2}
@@ -157,6 +166,160 @@ class SentimentService(ISentimentService):
     async def get_sentiment_linked_params(self, market: MarketType) -> dict[str, float]:
         result = await self.get_current(market)
         return dict(_LINKED_PARAMS[result.level])
+
+    def _calc_foreign_futures_score(self) -> float:
+        """從 TAIFEX 取外資台指期未平倉淨口數，線性映射至 0-100 分。"""
+        try:
+            from atlas.infrastructure.taifex_data import fetch_futures_institutional
+
+            df = fetch_futures_institutional()
+            if df.empty:
+                logger.warning("情緒因子[外資期貨]: 無資料，使用預設 50")
+                return 50.0
+
+            # 取外資列
+            foreign = df[df["identity"] == "外資"]
+            if foreign.empty:
+                logger.warning("情緒因子[外資期貨]: 找不到外資資料，使用預設 50")
+                return 50.0
+
+            net_pos = int(foreign.iloc[0]["net_position"])
+
+            # 分段線性映射
+            if net_pos >= _FUTURES_NET_UPPER:
+                score = 90.0
+            elif net_pos >= _FUTURES_NET_HIGH:
+                # 10000~20000 → 70~90
+                score = 70.0 + (net_pos - _FUTURES_NET_HIGH) / (
+                    _FUTURES_NET_UPPER - _FUTURES_NET_HIGH
+                ) * 20.0
+            elif net_pos >= 0:
+                # 0~10000 → 50~70
+                score = 50.0 + net_pos / _FUTURES_NET_HIGH * 20.0
+            elif net_pos >= _FUTURES_NET_LOW:
+                # -10000~0 → 30~50
+                score = 30.0 + (net_pos - _FUTURES_NET_LOW) / (
+                    0 - _FUTURES_NET_LOW
+                ) * 20.0
+            elif net_pos >= _FUTURES_NET_LOWER:
+                # -20000~-10000 → 10~30
+                score = 10.0 + (net_pos - _FUTURES_NET_LOWER) / (
+                    _FUTURES_NET_LOW - _FUTURES_NET_LOWER
+                ) * 20.0
+            else:
+                score = 10.0
+
+            logger.info("情緒因子[外資期貨]: 淨口數=%d, 分數=%.1f", net_pos, score)
+            return round(score, 1)
+        except Exception as exc:
+            logger.warning("情緒因子[外資期貨] 計算失敗: %s", exc)
+            return 50.0
+
+    def _calc_margin_usage_score(self) -> float:
+        """從融資餘額/限額計算全市場融資使用率，映射至情緒分數。
+
+        使用率高 → 散戶槓桿高 → 偏貪婪（高分）
+        使用率低 → 市場冷清 → 偏中性（低分）
+
+        映射規則：
+        - 使用率 > 50% → 80 分（過度貪婪）
+        - 使用率 30-50% → 線性映射 50-80
+        - 使用率 15-30% → 線性映射 30-50（中性偏恐慌）
+        - 使用率 < 15% → 20 分（極度冷清/恐慌後）
+        """
+        try:
+            from atlas.infrastructure.margin_data import (
+                fetch_tpex_margin_all,
+                fetch_twse_margin_all,
+            )
+
+            import pandas as pd
+
+            twse = fetch_twse_margin_all()
+            tpex = fetch_tpex_margin_all()
+
+            if twse.empty and tpex.empty:
+                logger.warning("情緒因子[融資使用率]: 無資料，使用預設 50")
+                return 50.0
+
+            combined = pd.concat([twse, tpex], ignore_index=True)
+
+            total_balance = combined["margin_balance"].sum()
+            total_limit = combined["margin_limit"].sum()
+
+            if total_limit <= 0:
+                logger.warning("情緒因子[融資使用率]: 限額為零，使用預設 50")
+                return 50.0
+
+            usage_pct = total_balance / total_limit * 100
+
+            if usage_pct > 50:
+                score = 80.0
+            elif usage_pct >= 30:
+                score = 50.0 + (usage_pct - 30) / 20 * 30.0
+            elif usage_pct >= 15:
+                score = 30.0 + (usage_pct - 15) / 15 * 20.0
+            else:
+                score = 20.0
+
+            logger.info(
+                "情緒因子[融資使用率]: 使用率=%.1f%%, 分數=%.1f", usage_pct, score
+            )
+            return round(score, 1)
+        except Exception as exc:
+            logger.warning("情緒因子[融資使用率] 計算失敗: %s", exc)
+            return 50.0
+
+    def _calc_pc_ratio_score(self) -> float:
+        """從 TAIFEX P/C ratio (OI) 映射至情緒分數。
+
+        P/C ratio 高 → 買 Put 的人多 → 恐慌 → 低分
+        P/C ratio 低 → 買 Call 的人多 → 貪婪 → 高分
+
+        映射規則：
+        - P/C > 1.5 → 10 分（極度恐慌）
+        - P/C 1.2~1.5 → 線性映射 20~10
+        - P/C 0.8~1.2 → 線性映射 80~20（中性帶）
+        - P/C < 0.8 → 80 分（貪婪）
+        - P/C < 0.5 → 90 分（極度貪婪）
+        """
+        try:
+            from atlas.infrastructure.taifex_data import fetch_put_call_ratio
+
+            data = fetch_put_call_ratio()
+            if not data:
+                logger.warning("情緒因子[P/C ratio]: 無資料，使用預設 50")
+                return 50.0
+
+            # 優先用 OI ratio，fallback 到 volume ratio
+            pc_ratio = data.get("pc_ratio_oi", 0.0)
+            if pc_ratio <= 0:
+                pc_ratio = data.get("pc_ratio_volume", 0.0)
+            if pc_ratio <= 0:
+                logger.warning("情緒因子[P/C ratio]: ratio 為零，使用預設 50")
+                return 50.0
+
+            if pc_ratio < 0.5:
+                score = 90.0
+            elif pc_ratio < 0.8:
+                # 0.5~0.8 → 90~80
+                score = 90.0 - (pc_ratio - 0.5) / 0.3 * 10.0
+            elif pc_ratio <= 1.2:
+                # 0.8~1.2 → 80~20
+                score = 80.0 - (pc_ratio - 0.8) / 0.4 * 60.0
+            elif pc_ratio <= 1.5:
+                # 1.2~1.5 → 20~10
+                score = 20.0 - (pc_ratio - 1.2) / 0.3 * 10.0
+            else:
+                score = 10.0
+
+            logger.info(
+                "情緒因子[P/C ratio]: ratio=%.2f, 分數=%.1f", pc_ratio, score
+            )
+            return round(score, 1)
+        except Exception as exc:
+            logger.warning("情緒因子[P/C ratio] 計算失敗: %s", exc)
+            return 50.0
 
     async def _calc_advance_decline_score(self, market: MarketType) -> float:
         """從全市場當日行情計算漲跌家數比。"""

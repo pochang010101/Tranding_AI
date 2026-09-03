@@ -201,12 +201,12 @@ def render() -> None:
     with col_w0:
         select_all = st.checkbox("全選", key="screener_select_all")
     with col_w1:
-        add_watchlist_btn = st.button("⭐ 加入觀察股", type="primary", use_container_width=True)
+        add_watchlist_btn = st.button("⭐ 加入觀察股", type="primary", width="stretch")
     with col_w2:
-        add_all_btn = st.button("⭐ 全選加入觀察股", use_container_width=True)
+        add_all_btn = st.button("⭐ 全選加入觀察股", width="stretch")
     with col_w3:
         if existing_watchlist:
-            if st.button("🗑 清空觀察股", use_container_width=True):
+            if st.button("🗑 清空觀察股", width="stretch"):
                 st.session_state["watchlist_codes"] = []
                 st.rerun()
     with col_w4:

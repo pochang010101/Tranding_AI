@@ -22,7 +22,7 @@ PAGES = [
     ("margin",        "💰", "籌碼"),
     ("hedge",         "🛡️", "對沖"),
     ("factor_health", "🔬", "因子"),
-    ("stock_analysis","📊", "個股"),
+    ("stock_analysis","🔎", "個股"),
     ("scheduler",     "⏰", "排程"),
     ("settings",      "⚙️", "設定"),
 ]

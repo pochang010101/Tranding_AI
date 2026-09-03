@@ -44,7 +44,7 @@ def render() -> None:
             if st.button(
                 f"⭐ 從觀察股載入（{len(saved_watchlist)} 檔）",
                 disabled=(len(saved_watchlist) == 0),
-                use_container_width=True,
+                width="stretch",
             ):
                 st.session_state["radar_watchlist_input"] = ", ".join(saved_watchlist)
                 st.rerun()
@@ -64,7 +64,7 @@ def render() -> None:
 
         col_btn, col_auto, col_info = st.columns([1, 1, 2])
         with col_btn:
-            scan_clicked = st.button("🔍 執行掃描", type="primary", use_container_width=True)
+            scan_clicked = st.button("🔍 執行掃描", type="primary", width="stretch")
         with col_auto:
             auto_refresh = st.toggle("⏱ 自動更新 (30s)", value=True, key="radar_auto_refresh")
         with col_info:

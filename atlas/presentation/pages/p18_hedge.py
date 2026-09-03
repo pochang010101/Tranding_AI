@@ -153,7 +153,7 @@ def render() -> None:
                     })
                     show_cols = [c for c in ["法人", "多方未平倉", "空方未平倉", "淨部位"] if c in display_df.columns]
                     if show_cols:
-                        st.dataframe(display_df[show_cols], hide_index=True, use_container_width=True)
+                        st.dataframe(display_df[show_cols], hide_index=True, width="stretch")
             except Exception:
                 pass
         else:
@@ -311,7 +311,7 @@ def render() -> None:
                     scan_df["方向"] = scan_df["方向"].apply(
                         lambda d: f"{_direction_emoji(d)} {d}" if d != "N/A" else "N/A"
                     )
-                st.dataframe(scan_df, hide_index=True, use_container_width=True)
+                st.dataframe(scan_df, hide_index=True, width="stretch")
             else:
                 st.info("批次掃描無結果（HedgeAdvisor 模組尚未建置）。")
 

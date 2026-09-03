@@ -21,19 +21,32 @@ def _score_color(value: int | float) -> str:
     return "#ff1744"
 
 
-def _base_layout(fig: go.Figure, title: str, height: int) -> go.Figure:
-    """統一圖表佈局（透明背景、緊湊 margin）。"""
-    c = get_colors()
+def _base_layout(
+    fig: go.Figure, title: str, height: int, *, dark: bool = True,
+) -> go.Figure:
+    """統一圖表佈局（透明背景、緊湊 margin）。
+
+    Parameters
+    ----------
+    dark : bool
+        True → 深色主題（白色文字、深色網格），False → 亮色主題。
+    """
+    from atlas.presentation.components.theme import DARK, LIGHT
+    c = DARK if dark else LIGHT
     fig.update_layout(
         title=dict(text=title, font=dict(size=14)),
         template=c["plotly_template"],
         plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor=c["plotly_paper"],
+        paper_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Microsoft JhengHei, sans-serif", color=c["text_primary"]),
         height=height,
         margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(bgcolor="rgba(0,0,0,0)"),
     )
+    # 統一網格線色
+    grid_color = c["plotly_grid"]
+    fig.update_xaxes(gridcolor=grid_color)
+    fig.update_yaxes(gridcolor=grid_color)
     return fig
 
 
@@ -46,6 +59,8 @@ def radar_chart(
     overall_score: int | None = None,
     overall_grade: str | None = None,
     height: int = 350,
+    *,
+    dark: bool = True,
 ) -> go.Figure:
     """多維度雷達圖，中心顯示總分與等級。"""
     avg = sum(values) / len(values) if values else 0
@@ -83,7 +98,7 @@ def radar_chart(
             font=dict(size=22, color=_score_color(overall_score)),
         )
 
-    return _base_layout(fig, title, height)
+    return _base_layout(fig, title, height, dark=dark)
 
 
 # ── 2. 健康度圓環組 ────────────────────────────────
@@ -92,6 +107,8 @@ def gauge_rings(
     metrics: list[dict],
     columns: int = 5,
     height: int = 200,
+    *,
+    dark: bool = True,
 ) -> go.Figure:
     """多指標圓環儀表組，每個 metric 為 {"name": str, "value": int}。"""
     n = len(metrics)
@@ -138,7 +155,7 @@ def gauge_rings(
             font=dict(size=14, color=color),
         )
 
-    return _base_layout(fig, "", height)
+    return _base_layout(fig, "", height, dark=dark)
 
 
 # ── 3. 多空能量條 ──────────────────────────────────
@@ -148,6 +165,8 @@ def energy_bar(
     bear_pct: float,
     title: str = "多空能量",
     height: int = 80,
+    *,
+    dark: bool = True,
 ) -> go.Figure:
     """水平堆疊多空能量條，左紅（多）右綠（空）。"""
     c = get_colors()
@@ -194,7 +213,7 @@ def energy_bar(
         font=dict(size=12, color=c["text_secondary"]),
     )
 
-    return _base_layout(fig, title, height)
+    return _base_layout(fig, title, height, dark=dark)
 
 
 # ── 4. AI 預測路徑圖（扇形機率帶）──────────────────
@@ -208,6 +227,8 @@ def prediction_fan_chart(
     days: int = 10,
     title: str = "AI 預測路徑",
     height: int = 350,
+    *,
+    dark: bool = True,
 ) -> go.Figure:
     """三路徑扇形預測圖：上漲(紅帶)、盤整(黃帶)、下跌(綠帶)。"""
     c = get_colors()
@@ -276,7 +297,7 @@ def prediction_fan_chart(
         xaxis=dict(gridcolor=c["plotly_grid"]),
     )
 
-    return _base_layout(fig, title, height)
+    return _base_layout(fig, title, height, dark=dark)
 
 
 # ── 5. 籌碼熱區圖（成本分布）──────────────────────
@@ -289,6 +310,8 @@ def volume_profile_chart(
     resistance: float | None = None,
     title: str = "成本分布圖",
     height: int = 350,
+    *,
+    dark: bool = True,
 ) -> go.Figure:
     """水平柱狀籌碼分布圖（價格 Y 軸，量 X 軸），標註關鍵價位。"""
     c = get_colors()
@@ -374,7 +397,7 @@ def volume_profile_chart(
         yaxis=dict(title="價格", gridcolor=c["plotly_grid"]),
     )
 
-    return _base_layout(fig, title, height)
+    return _base_layout(fig, title, height, dark=dark)
 
 
 # ── 6. 法人買賣超組合圖 ───────────────────────────
@@ -387,6 +410,8 @@ def institutional_flow_chart(
     total: list[int],
     title: str = "三大法人買賣超",
     height: int = 350,
+    *,
+    dark: bool = True,
 ) -> go.Figure:
     """外資/投信/自營柱狀 + 合計折線，右下角標註累積偏多空。"""
     c = get_colors()
@@ -435,4 +460,4 @@ def institutional_flow_chart(
         borderpad=6,
     )
 
-    return _base_layout(fig, title, height)
+    return _base_layout(fig, title, height, dark=dark)

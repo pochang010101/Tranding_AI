@@ -273,7 +273,7 @@ def render() -> None:
             ].copy()
             top_inc.columns = ["代碼", "名稱", "融資增減", "融資餘額", "增幅%"]
             top_inc["增幅%"] = top_inc["增幅%"].round(2)
-            st.dataframe(top_inc, hide_index=True, use_container_width=True)
+            st.dataframe(top_inc, hide_index=True, width="stretch")
 
         with col_right:
             st.markdown("**券資比 Top 10**")
@@ -282,7 +282,7 @@ def render() -> None:
             ].copy()
             top_sr.columns = ["代碼", "名稱", "券資比%", "融資餘額", "融券餘額"]
             top_sr["券資比%"] = top_sr["券資比%"].round(2)
-            st.dataframe(top_sr, hide_index=True, use_container_width=True)
+            st.dataframe(top_sr, hide_index=True, width="stretch")
 
         # ── 融資大減 Top 10 ──
         st.divider()
@@ -292,7 +292,7 @@ def render() -> None:
         ].copy()
         top_dec.columns = ["代碼", "名稱", "融資減少", "融資餘額", "減幅%"]
         top_dec["減幅%"] = top_dec["減幅%"].round(2)
-        st.dataframe(top_dec, hide_index=True, use_container_width=True)
+        st.dataframe(top_dec, hide_index=True, width="stretch")
 
         # ── 借券賣出 Top 10 ──
         st.divider()
@@ -306,7 +306,7 @@ def render() -> None:
                     ["code", "name", "lending_balance", "lending_volume"]
                 ].copy()
                 top_lending.columns = ["代碼", "名稱", "借券賣出餘額", "當日借券賣出"]
-                st.dataframe(top_lending, hide_index=True, use_container_width=True)
+                st.dataframe(top_lending, hide_index=True, width="stretch")
         except Exception as exc:
             logger.warning("借券資料載入失敗: %s", exc)
             st.warning(f"借券資料載入失敗：{exc}")
